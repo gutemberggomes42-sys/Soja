@@ -48,6 +48,9 @@
             <button onclick="switchTab('deposits')" id="btn-deposits" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
                 <i data-lucide="landmark" class="inline-block mr-2" size="18"></i>Depositários
             </button>
+            <button onclick="switchTab('farms')" id="btn-farms" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
+                <i data-lucide="map" class="inline-block mr-2" size="18"></i>Fazendas
+            </button>
         </nav>
 
         <!-- Seções de Conteúdo -->
@@ -205,19 +208,68 @@
                     </div>
                 </div>
             </section>
+
+            <!-- FARMS SECTION (NEW) -->
+            <section id="tab-farms" class="hidden space-y-8">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-1">
+                        <form onsubmit="handleFarmAreaSubmit(event)" class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 space-y-6">
+                            <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-4">
+                                <i data-lucide="map" class="text-indigo-600"></i>Configurar Área
+                            </h3>
+                            <div class="space-y-4">
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fazenda</label>
+                                    <input type="text" id="farm-area-name" list="list-farms-config" placeholder="Escolha ou digite..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all">
+                                    <datalist id="list-farms-config"></datalist>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Área (Hectares - Há)</label>
+                                    <input type="number" step="0.01" id="farm-area-val" placeholder="0.00" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all">
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100">
+                                ATUALIZAR ÁREA
+                            </button>
+                        </form>
+                    </div>
+                    <div class="lg:col-span-2">
+                        <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                            <div class="p-6 border-b border-slate-50">
+                                <h3 class="font-black text-slate-800 flex items-center gap-2"><i data-lucide="list"></i>Áreas Cadastradas</h3>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm">
+                                    <thead>
+                                        <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
+                                            <th class="px-6 py-4">Fazenda</th>
+                                            <th class="px-6 py-4 text-right">Área (Há)</th>
+                                            <th class="px-6 py-4"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="farms-table-body" class="divide-y divide-slate-50">
+                                        <!-- Table via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
     <script>
         // SERVIÇO DE DADOS (LOCALSTORAGE)
-        const STORAGE_KEY = 'soja_app_single_file_data_v2';
+        const STORAGE_KEY = 'soja_app_single_file_data_v3';
         let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
             entries: [],
             farms: [],
             varieties: [],
             warehouses: [],
             owners: [],
-            teams: []
+            teams: [],
+            farmAreas: {} // { farmName: areaValue }
         };
 
         function saveToDB() {
@@ -227,7 +279,7 @@
 
         // FUNÇÕES DE NAVEGAÇÃO
         function switchTab(tabId) {
-            ['dashboard', 'harvest', 'deposits'].forEach(id => {
+            ['dashboard', 'harvest', 'deposits', 'farms'].forEach(id => {
                 const tab = document.getElementById(`tab-${id}`);
                 const btn = document.getElementById(`btn-${id}`);
                 if (tab) tab.classList.toggle('hidden', id !== tabId);
@@ -288,9 +340,30 @@
             alert('Registro salvo com sucesso!');
         }
 
+        function handleFarmAreaSubmit(e) {
+            e.preventDefault();
+            const farmName = document.getElementById('farm-area-name').value.trim();
+            const areaVal = parseFloat(document.getElementById('farm-area-val').value);
+
+            if (farmName && !isNaN(areaVal)) {
+                db.farmAreas[farmName] = areaVal;
+                if (!db.farms.includes(farmName)) db.farms.push(farmName);
+                saveToDB();
+                e.target.reset();
+                alert('Área da fazenda atualizada!');
+            }
+        }
+
         function deleteEntry(id) {
             if (confirm('Deseja excluir este registro?')) {
                 db.entries = db.entries.filter(e => e.id !== id);
+                saveToDB();
+            }
+        }
+
+        function deleteFarmArea(farmName) {
+            if (confirm(`Excluir área da fazenda ${farmName}?`)) {
+                delete db.farmAreas[farmName];
                 saveToDB();
             }
         }
@@ -300,12 +373,15 @@
             renderHarvest();
             renderDashboard();
             renderDeposits();
+            renderFarms();
             renderDatalists();
             lucide.createIcons();
         }
 
         function renderDatalists() {
-            document.getElementById('list-farms').innerHTML = db.farms.map(f => `<option value="${f}">`).join('');
+            const farmsHTML = db.farms.map(f => `<option value="${f}">`).join('');
+            document.getElementById('list-farms').innerHTML = farmsHTML;
+            document.getElementById('list-farms-config').innerHTML = farmsHTML;
             document.getElementById('list-varieties').innerHTML = db.varieties.map(v => `<option value="${v}">`).join('');
             document.getElementById('list-owners').innerHTML = db.owners.map(o => `<option value="${o}">`).join('');
             document.getElementById('list-warehouses').innerHTML = db.warehouses.map(w => `<option value="${w}">`).join('');
@@ -345,7 +421,15 @@
             const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
             const totalSacks = totalKg / 60;
             const totalTons = totalKg / 1000;
-            const avgProd = totalSacks / 4346.75; // Área fixa mockada
+            
+            // Área real calculada a partir das fazendas que tiveram colheita
+            let totalArea = 0;
+            const farmsInHarvest = [...new Set(db.entries.map(e => e.farm))];
+            farmsInHarvest.forEach(f => {
+                totalArea += (db.farmAreas[f] || 0);
+            });
+            
+            const avgProd = totalArea > 0 ? totalSacks / totalArea : 0;
 
             if (stats) {
                 stats.innerHTML = `
@@ -363,15 +447,15 @@
                     </div>
                     <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
                         <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4"><i data-lucide="target"></i></div>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produtividade</p>
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produtividade Média</p>
                         <h4 class="text-2xl font-black text-slate-800">${avgProd.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4>
                         <p class="text-xs font-bold text-slate-400">Sacos / Há</p>
                     </div>
                     <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
                         <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4"><i data-lucide="map"></i></div>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Área Total</p>
-                        <h4 class="text-2xl font-black text-slate-800">4.346,7</h4>
-                        <p class="text-xs font-bold text-slate-400">Hectares</p>
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Área Mapeada</p>
+                        <h4 class="text-2xl font-black text-slate-800">${totalArea.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4>
+                        <p class="text-xs font-bold text-slate-400">Hectares (Há)</p>
                     </div>
                 `;
             }
@@ -435,6 +519,23 @@
                         <td class="px-8 py-6 text-right font-black text-slate-900">${(g.kg / 60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
                     </tr>
                 `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhum depósito</td></tr>';
+            }
+        }
+
+        function renderFarms() {
+            const tableBody = document.getElementById('farms-table-body');
+            if (tableBody) {
+                tableBody.innerHTML = Object.entries(db.farmAreas).map(([name, area]) => `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4 font-black text-slate-800">${name}</td>
+                        <td class="px-6 py-4 text-right font-bold text-indigo-600">${area.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} Há</td>
+                        <td class="px-6 py-4 text-right">
+                            <button onclick="deleteFarmArea('${name}')" class="text-slate-300 hover:text-red-500 transition-colors">
+                                <i data-lucide="trash-2" size="16"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('') || '<tr><td colspan="3" class="py-12 text-center text-slate-300">Nenhuma área configurada</td></tr>';
             }
         }
 
