@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/Soja/static/css/main.621feff2.css",
+    "main.js": "/Soja/static/js/main.1689120c.js",
+    "static/js/453.20359781.chunk.js": "/Soja/static/js/453.20359781.chunk.js",
+    "index.html": "/Soja/index.html",
+    "main.621feff2.css.map": "/Soja/static/css/main.621feff2.css.map",
+    "main.1689120c.js.map": "/Soja/static/js/main.1689120c.js.map",
+    "453.20359781.chunk.js.map": "/Soja/static/js/453.20359781.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.621feff2.css",
+    "static/js/main.1689120c.js"
+  ]
+}
