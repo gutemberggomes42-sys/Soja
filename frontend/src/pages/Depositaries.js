@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { UserCheck, Warehouse as WarehouseIcon, Wallet, ArrowRightLeft, Landmark } from 'lucide-react';
-
-const API_URL = 'http://localhost:3001/api';
+import StorageService from '../services/StorageService';
 
 const Depositaries = () => {
   const [report, setReport] = useState([]);
@@ -12,15 +10,10 @@ const Depositaries = () => {
     fetchReport();
   }, []);
 
-  const fetchReport = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/reports/deposits`);
-      setReport(res.data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching report:', error);
-      setLoading(false);
-    }
+  const fetchReport = () => {
+    const data = StorageService.getDepositsReport();
+    setReport(data);
+    setLoading(false);
   };
 
   const totalKg = report.reduce((acc, curr) => acc + (parseFloat(curr.totalPesoLiquido) || 0), 0);
@@ -39,7 +32,6 @@ const Depositaries = () => {
         </div>
       </div>
 
-      {/* Financial Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-slate-900 p-8 rounded-[2rem] text-white relative overflow-hidden group shadow-2xl shadow-slate-200">
           <Wallet className="absolute -right-4 -bottom-4 text-white/5 group-hover:scale-110 transition-transform" size={140} />
@@ -65,7 +57,6 @@ const Depositaries = () => {
         </div>
       </div>
 
-      {/* Detailed List */}
       <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-8 border-b border-slate-50 flex items-center justify-between">
           <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">

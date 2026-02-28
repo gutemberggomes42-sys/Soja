@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { PlusCircle, Save, Trash2, Search, ClipboardList } from 'lucide-react';
-
-const API_URL = 'http://localhost:3001/api';
+import { PlusCircle, Save, Search, ClipboardList } from 'lucide-react';
+import StorageService from '../services/StorageService';
 
 const HarvestLog = () => {
   const [entries, setEntries] = useState([]);
-  const [farms, setFarms] = useState([]);
-  const [varieties, setVarieties] = useState([]);
-  const [drivers, setDrivers] = useState([]);
-  const [warehouses, setWarehouses] = useState([]);
-  const [owners, setOwners] = useState([]);
+  const [collections, setCollections] = useState({
+    farms: [],
+    varieties: [],
+    drivers: [],
+    warehouses: [],
+    owners: []
+  });
   
   const [formData, setFormData] = useState({
     dataPesagem: new Date().toISOString().split('T')[0],
@@ -34,25 +34,9 @@ const HarvestLog = () => {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [eRes, fRes, vRes, dRes, wRes, oRes] = await Promise.all([
-        axios.get(`${API_URL}/harvest-entries`),
-        axios.get(`${API_URL}/farms`),
-        axios.get(`${API_URL}/varieties`),
-        axios.get(`${API_URL}/drivers`),
-        axios.get(`${API_URL}/warehouses`),
-        axios.get(`${API_URL}/owners`)
-      ]);
-      setEntries(eRes.data);
-      setFarms(fRes.data);
-      setVarieties(vRes.data);
-      setDrivers(dRes.data);
-      setWarehouses(wRes.data);
-      setOwners(oRes.data);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    }
+  const fetchData = () => {
+    setEntries(StorageService.getHarvestEntries());
+    setCollections(StorageService.getCollections());
   };
 
   const handleInputChange = (e) => {
@@ -69,7 +53,7 @@ const HarvestLog = () => {
     setFormData(updatedData);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.farmName || !formData.varietyName || !formData.pesoLiquido) {
       alert('Por favor, preencha os campos obrigatórios (Fazenda, Variedade e Pesos)');
@@ -78,7 +62,7 @@ const HarvestLog = () => {
 
     setIsSubmitting(true);
     try {
-      await axios.post(`${API_URL}/harvest-entries`, formData);
+      StorageService.addHarvestEntry(formData);
       setFormData({
         ...formData,
         romaneio: '',
@@ -117,7 +101,6 @@ const HarvestLog = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Form Panel */}
         <div className="lg:col-span-1">
           <form onSubmit={handleSubmit} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 sticky top-6 space-y-5">
             <div className="flex items-center gap-2 font-bold text-slate-800 text-lg border-b border-slate-50 pb-4">
@@ -134,32 +117,32 @@ const HarvestLog = () => {
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 uppercase">Fazenda</label>
                   <input list="farms-list" name="farmName" value={formData.farmName} onChange={handleInputChange} placeholder="Digitar..." className="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-all" />
-                  <datalist id="farms-list">{farms.map(f => <option key={f.id} value={f.name} />)}</datalist>
+                  <datalist id="farms-list">{collections.farms.map(f => <option key={f.id} value={f.name} />)}</datalist>
                 </div>
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-500 uppercase">Variedade</label>
                 <input list="varieties-list" name="varietyName" value={formData.varietyName} onChange={handleInputChange} placeholder="Digitar..." className="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-all" />
-                <datalist id="varieties-list">{varieties.map(v => <option key={v.id} value={v.name} />)}</datalist>
+                <datalist id="varieties-list">{collections.varieties.map(v => <option key={v.id} value={v.name} />)}</datalist>
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-500 uppercase">Proprietário</label>
                 <input list="owners-list" name="ownerName" value={formData.ownerName} onChange={handleInputChange} placeholder="Digitar..." className="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-all" />
-                <datalist id="owners-list">{owners.map(o => <option key={o.id} value={o.name} />)}</datalist>
+                <datalist id="owners-list">{collections.owners.map(o => <option key={o.id} value={o.name} />)}</datalist>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 uppercase">Motorista</label>
                   <input list="drivers-list" name="driverName" value={formData.driverName} onChange={handleInputChange} placeholder="Digitar..." className="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-all" />
-                  <datalist id="drivers-list">{drivers.map(d => <option key={d.id} value={d.name} />)}</datalist>
+                  <datalist id="drivers-list">{collections.drivers.map(d => <option key={d.id} value={d.name} />)}</datalist>
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 uppercase">Armazém</label>
                   <input list="warehouses-list" name="warehouseName" value={formData.warehouseName} onChange={handleInputChange} placeholder="Digitar..." className="w-full bg-slate-50 border-0 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-all" />
-                  <datalist id="warehouses-list">{warehouses.map(w => <option key={w.id} value={w.name} />)}</datalist>
+                  <datalist id="warehouses-list">{collections.warehouses.map(w => <option key={w.id} value={w.name} />)}</datalist>
                 </div>
               </div>
 
@@ -206,7 +189,6 @@ const HarvestLog = () => {
           </form>
         </div>
 
-        {/* Table Panel */}
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="p-5 border-b border-slate-50 flex items-center justify-between">

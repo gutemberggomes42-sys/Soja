@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { TrendingUp, Map, Sprout, BarChart3, ArrowUpRight, Target } from 'lucide-react';
-
-const API_URL = 'http://localhost:3001/api';
+import StorageService from '../services/StorageService';
 
 const Dashboard = () => {
   const [report, setReport] = useState([]);
@@ -12,21 +10,15 @@ const Dashboard = () => {
     fetchReport();
   }, []);
 
-  const fetchReport = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/reports/production`);
-      setReport(res.data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching report:', error);
-      setLoading(false);
-    }
+  const fetchReport = () => {
+    const data = StorageService.getProductionReport();
+    setReport(data);
+    setLoading(false);
   };
 
   const totalKg = report.reduce((acc, curr) => acc + (parseFloat(curr.totalPesoLiquido) || 0), 0);
   const totalTons = totalKg / 1000;
   const totalSacks = totalKg / 60;
-  // Mock total area since it's dynamic now
   const totalArea = 4346.75; 
   const avgProductivity = totalArea > 0 ? totalSacks / totalArea : 0;
 
@@ -46,7 +38,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
           icon={<TrendingUp />} 
@@ -78,7 +69,6 @@ const Dashboard = () => {
         />
       </div>
 
-      {/* Table Section */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
           <div>
