@@ -98,15 +98,26 @@
                                     <datalist id="list-farms"></datalist>
                                 </div>
                             </div>
-                            <div class="space-y-1">
-                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Variedade</label>
-                                <input type="text" id="form-variety" list="list-varieties" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
-                                <datalist id="list-varieties"></datalist>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Variedade</label>
+                                    <input type="text" id="form-variety" list="list-varieties" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                    <datalist id="list-varieties"></datalist>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Romaneio</label>
+                                    <input type="text" id="form-romaneio" placeholder="Nº Romaneio..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                </div>
                             </div>
                             <div class="space-y-1">
-                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Proprietário</label>
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depositário</label>
                                 <input type="text" id="form-owner" list="list-owners" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
                                 <datalist id="list-owners"></datalist>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Equipe de Colheita</label>
+                                <input type="text" id="form-team" list="list-teams" placeholder="Nome da Equipe..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                <datalist id="list-teams"></datalist>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div class="space-y-1">
@@ -115,7 +126,7 @@
                                     <datalist id="list-warehouses"></datalist>
                                 </div>
                                 <div class="space-y-1">
-                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ticket/Ticket</label>
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ticket / Ticket</label>
                                     <input type="text" id="form-ticket" placeholder="Nº..." class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
                                 </div>
                             </div>
@@ -152,8 +163,8 @@
                             <table class="w-full text-left text-sm">
                                 <thead>
                                     <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
-                                        <th class="px-6 py-4">Data</th>
-                                        <th class="px-6 py-4">Origem / Variedade</th>
+                                        <th class="px-6 py-4">Data / Romaneio</th>
+                                        <th class="px-6 py-4">Origem / Equipe</th>
                                         <th class="px-6 py-4 text-right">Líquido (kg)</th>
                                         <th class="px-6 py-4 text-right">Sacos</th>
                                         <th class="px-6 py-4"></th>
@@ -175,13 +186,13 @@
                 </div>
                 <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-8 border-b border-slate-50">
-                        <h2 class="text-xl font-black text-slate-800 flex items-center gap-2"><i data-lucide="user-check" class="text-blue-600"></i>Saldos por Conta</h2>
+                        <h2 class="text-xl font-black text-slate-800 flex items-center gap-2"><i data-lucide="user-check" class="text-blue-600"></i>Saldos por Depositário</h2>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead>
                                 <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
-                                    <th class="px-8 py-5">Proprietário</th>
+                                    <th class="px-8 py-5">Depositário</th>
                                     <th class="px-8 py-5">Armazém</th>
                                     <th class="px-8 py-5 text-right">Peso (T)</th>
                                     <th class="px-8 py-5 text-right">Saldo (Sacos)</th>
@@ -199,13 +210,14 @@
 
     <script>
         // SERVIÇO DE DADOS (LOCALSTORAGE)
-        const STORAGE_KEY = 'soja_app_single_file_data';
+        const STORAGE_KEY = 'soja_app_single_file_data_v2';
         let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
             entries: [],
             farms: [],
             varieties: [],
             warehouses: [],
-            owners: []
+            owners: [],
+            teams: []
         };
 
         function saveToDB() {
@@ -216,9 +228,13 @@
         // FUNÇÕES DE NAVEGAÇÃO
         function switchTab(tabId) {
             ['dashboard', 'harvest', 'deposits'].forEach(id => {
-                document.getElementById(`tab-${id}`).classList.toggle('hidden', id !== tabId);
-                document.getElementById(`btn-${id}`).classList.toggle('tab-active', id === tabId);
-                document.getElementById(`btn-${id}`).classList.toggle('tab-inactive', id !== tabId);
+                const tab = document.getElementById(`tab-${id}`);
+                const btn = document.getElementById(`btn-${id}`);
+                if (tab) tab.classList.toggle('hidden', id !== tabId);
+                if (btn) {
+                    btn.classList.toggle('tab-active', id === tabId);
+                    btn.classList.toggle('tab-inactive', id !== tabId);
+                }
             });
             renderAll();
         }
@@ -238,6 +254,8 @@
             const varietyName = document.getElementById('form-variety').value.trim();
             const ownerName = document.getElementById('form-owner').value.trim();
             const warehouseName = document.getElementById('form-warehouse').value.trim();
+            const teamName = document.getElementById('form-team').value.trim();
+            const romaneio = document.getElementById('form-romaneio').value.trim();
             const bruto = parseFloat(document.getElementById('form-bruto').value);
             const tara = parseFloat(document.getElementById('form-tara').value);
             const desc = parseFloat(document.getElementById('form-desc').value) || 0;
@@ -250,6 +268,8 @@
                 variety: varietyName,
                 owner: ownerName,
                 warehouse: warehouseName,
+                team: teamName,
+                romaneio: romaneio,
                 ticket: document.getElementById('form-ticket').value,
                 bruto, tara, desc, liquido
             };
@@ -259,11 +279,13 @@
             if (!db.varieties.includes(varietyName)) db.varieties.push(varietyName);
             if (!db.owners.includes(ownerName)) db.owners.push(ownerName);
             if (!db.warehouses.includes(warehouseName)) db.warehouses.push(warehouseName);
+            if (!db.teams.includes(teamName)) db.teams.push(teamName);
 
             saveToDB();
             e.target.reset();
+            document.getElementById('form-date').value = new Date().toISOString().split('T')[0];
             calcLiquido();
-            alert('Registro salvo!');
+            alert('Registro salvo com sucesso!');
         }
 
         function deleteEntry(id) {
@@ -287,6 +309,7 @@
             document.getElementById('list-varieties').innerHTML = db.varieties.map(v => `<option value="${v}">`).join('');
             document.getElementById('list-owners').innerHTML = db.owners.map(o => `<option value="${o}">`).join('');
             document.getElementById('list-warehouses').innerHTML = db.warehouses.map(w => `<option value="${w}">`).join('');
+            document.getElementById('list-teams').innerHTML = db.teams.map(t => `<option value="${t}">`).join('');
         }
 
         function renderHarvest() {
@@ -296,10 +319,13 @@
 
             tbody.innerHTML = db.entries.sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => `
                 <tr class="hover:bg-slate-50 transition-all group">
-                    <td class="px-6 py-4 font-bold text-slate-700">${new Date(e.date).toLocaleDateString('pt-BR')}</td>
+                    <td class="px-6 py-4">
+                        <div class="font-bold text-slate-700">${new Date(e.date).toLocaleDateString('pt-BR')}</div>
+                        <div class="text-[10px] text-blue-500 font-black uppercase">Rom: ${e.romaneio}</div>
+                    </td>
                     <td class="px-6 py-4">
                         <div class="font-black text-slate-800">${e.farm}</div>
-                        <div class="text-[10px] text-slate-400 font-bold uppercase">${e.variety}</div>
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">${e.variety} • ${e.team || 'S/ Equipe'}</div>
                     </td>
                     <td class="px-6 py-4 text-right font-black text-slate-900">${e.liquido.toLocaleString('pt-BR')}</td>
                     <td class="px-6 py-4 text-right">
@@ -321,32 +347,34 @@
             const totalTons = totalKg / 1000;
             const avgProd = totalSacks / 4346.75; // Área fixa mockada
 
-            stats.innerHTML = `
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                    <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4"><i data-lucide="trending-up"></i></div>
-                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produção Total</p>
-                    <h4 class="text-2xl font-black text-slate-800">${totalTons.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4>
-                    <p class="text-xs font-bold text-slate-400">${totalKg.toLocaleString('pt-BR')} kg</p>
-                </div>
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                    <div class="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center mb-4"><i data-lucide="package"></i></div>
-                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Sacos</p>
-                    <h4 class="text-2xl font-black text-slate-800">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</h4>
-                    <p class="text-xs font-bold text-slate-400">Sacos 60kg</p>
-                </div>
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                    <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4"><i data-lucide="target"></i></div>
-                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produtividade</p>
-                    <h4 class="text-2xl font-black text-slate-800">${avgProd.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4>
-                    <p class="text-xs font-bold text-slate-400">Sacos / Há</p>
-                </div>
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                    <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4"><i data-lucide="map"></i></div>
-                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Área Total</p>
-                    <h4 class="text-2xl font-black text-slate-800">4.346,7</h4>
-                    <p class="text-xs font-bold text-slate-400">Hectares</p>
-                </div>
-            `;
+            if (stats) {
+                stats.innerHTML = `
+                    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4"><i data-lucide="trending-up"></i></div>
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produção Total</p>
+                        <h4 class="text-2xl font-black text-slate-800">${totalTons.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4>
+                        <p class="text-xs font-bold text-slate-400">${totalKg.toLocaleString('pt-BR')} kg</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                        <div class="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center mb-4"><i data-lucide="package"></i></div>
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Sacos</p>
+                        <h4 class="text-2xl font-black text-slate-800">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</h4>
+                        <p class="text-xs font-bold text-slate-400">Sacos 60kg</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4"><i data-lucide="target"></i></div>
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produtividade</p>
+                        <h4 class="text-2xl font-black text-slate-800">${avgProd.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4>
+                        <p class="text-xs font-bold text-slate-400">Sacos / Há</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4"><i data-lucide="map"></i></div>
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Área Total</p>
+                        <h4 class="text-2xl font-black text-slate-800">4.346,7</h4>
+                        <p class="text-xs font-bold text-slate-400">Hectares</p>
+                    </div>
+                `;
+            }
 
             const tableBody = document.getElementById('dashboard-table-body');
             const groups = {};
@@ -356,14 +384,16 @@
                 groups[key].kg += e.liquido;
             });
 
-            tableBody.innerHTML = Object.values(groups).map(g => `
-                <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-8 py-6 font-black text-slate-800">${g.farm}</td>
-                    <td class="px-8 py-6"><span class="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold text-slate-600">${g.variety}</span></td>
-                    <td class="px-8 py-6 text-right font-bold text-slate-600">${(g.kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
-                    <td class="px-8 py-6 text-right font-black text-slate-900">${(g.kg / 60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
-                </tr>
-            `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhum dado</td></tr>';
+            if (tableBody) {
+                tableBody.innerHTML = Object.values(groups).map(g => `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-8 py-6 font-black text-slate-800">${g.farm}</td>
+                        <td class="px-8 py-6"><span class="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold text-slate-600">${g.variety}</span></td>
+                        <td class="px-8 py-6 text-right font-bold text-slate-600">${(g.kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                        <td class="px-8 py-6 text-right font-black text-slate-900">${(g.kg / 60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
+                    </tr>
+                `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhum dado</td></tr>';
+            }
         }
 
         function renderDeposits() {
@@ -371,20 +401,22 @@
             const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
             const totalSacks = totalKg / 60;
 
-            summary.innerHTML = `
-                <div class="bg-slate-900 p-8 rounded-[2rem] text-white shadow-2xl shadow-slate-200 md:col-span-2">
-                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Geral em Depósito</p>
-                    <h4 class="text-4xl font-black mt-2">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} <span class="text-lg font-normal text-slate-500">sacos</span></h4>
-                    <div class="mt-4 flex items-center gap-2 text-blue-400 text-sm font-bold">
-                        <i data-lucide="arrow-right-left" size="16"></i> Equivalente a ${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Toneladas
+            if (summary) {
+                summary.innerHTML = `
+                    <div class="bg-slate-900 p-8 rounded-[2rem] text-white shadow-2xl shadow-slate-200 md:col-span-2">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Geral em Depósito</p>
+                        <h4 class="text-4xl font-black mt-2">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} <span class="text-lg font-normal text-slate-500">sacos</span></h4>
+                        <div class="mt-4 flex items-center gap-2 text-blue-400 text-sm font-bold">
+                            <i data-lucide="arrow-right-left" size="16"></i> Equivalente a ${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Toneladas
+                        </div>
                     </div>
-                </div>
-                <div class="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-center">
-                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contas Ativas</p>
-                    <h4 class="text-3xl font-black text-slate-800 mt-1">${db.owners.length}</h4>
-                    <p class="text-xs font-bold text-slate-400">Proprietários</p>
-                </div>
-            `;
+                    <div class="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-center">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contas Ativas</p>
+                        <h4 class="text-3xl font-black text-slate-800 mt-1">${db.owners.length}</h4>
+                        <p class="text-xs font-bold text-slate-400">Depositários</p>
+                    </div>
+                `;
+            }
 
             const tableBody = document.getElementById('deposits-table-body');
             const groups = {};
@@ -394,14 +426,16 @@
                 groups[key].kg += e.liquido;
             });
 
-            tableBody.innerHTML = Object.values(groups).map(g => `
-                <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-8 py-6 font-black text-slate-800 uppercase">${g.owner}</td>
-                    <td class="px-8 py-6 font-bold text-slate-500 flex items-center gap-2"><i data-lucide="warehouse" size="16" class="text-blue-500"></i> ${g.warehouse}</td>
-                    <td class="px-8 py-6 text-right font-bold text-slate-400">${(g.kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
-                    <td class="px-8 py-6 text-right font-black text-slate-900">${(g.kg / 60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
-                </tr>
-            `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhum depósito</td></tr>';
+            if (tableBody) {
+                tableBody.innerHTML = Object.values(groups).map(g => `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-8 py-6 font-black text-slate-800 uppercase">${g.owner}</td>
+                        <td class="px-8 py-6 font-bold text-slate-500 flex items-center gap-2"><i data-lucide="warehouse" size="16" class="text-blue-500"></i> ${g.warehouse}</td>
+                        <td class="px-8 py-6 text-right font-bold text-slate-400">${(g.kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                        <td class="px-8 py-6 text-right font-black text-slate-900">${(g.kg / 60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
+                    </tr>
+                `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhum depósito</td></tr>';
+            }
         }
 
         // Inicialização
