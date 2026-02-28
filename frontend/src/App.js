@@ -7,7 +7,7 @@ import Depositaries from './pages/Depositaries';
 
 function App() {
   return (
-    <Router>
+    <Router basename="/Soja">
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
