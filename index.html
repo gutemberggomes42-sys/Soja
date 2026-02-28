@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons para ícones bonitos -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Tesseract.js para OCR (Reconhecimento de Texto em Imagem) -->
+    <script src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
@@ -15,6 +17,15 @@
         .tab-active { color: #2563eb; border-bottom: 2px solid #2563eb; }
         .tab-inactive { color: #64748b; }
         .tab-inactive:hover { color: #334155; }
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
@@ -85,77 +96,108 @@
             <!-- HARVEST LOG SECTION -->
             <section id="tab-harvest" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div class="lg:col-span-1">
-                    <form onsubmit="handleFormSubmit(event)" class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 space-y-6 sticky top-8">
-                        <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-4">
-                            <i data-lucide="plus-circle" class="text-blue-600"></i>Novo Registro
-                        </h3>
-                        <div class="space-y-4">
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</label>
-                                    <input type="date" id="form-date" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                    <div class="space-y-6 sticky top-8">
+                        <!-- Botão de Upload / OCR -->
+                        <div class="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-[2rem] shadow-xl text-white relative overflow-hidden group">
+                            <i data-lucide="sparkles" class="absolute -right-4 -top-4 text-white/10 group-hover:scale-110 transition-transform" size="120"></i>
+                            <h3 class="text-lg font-black mb-2 flex items-center gap-2">
+                                <i data-lucide="scan-text"></i>Lançamento Inteligente
+                            </h3>
+                            <p class="text-xs text-blue-100 mb-6 font-medium leading-relaxed">Envie uma foto da sua planilha ou romaneio e o sistema preencherá os dados automaticamente.</p>
+                            
+                            <label class="cursor-pointer bg-white text-blue-700 px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-blue-50 transition-all active:scale-95 shadow-lg shadow-blue-900/20">
+                                <i data-lucide="camera"></i>ESCANEAR IMAGEM
+                                <input type="file" id="ocr-upload" accept="image/*" class="hidden" onchange="processImage(this)">
+                            </label>
+                            
+                            <div id="ocr-loader" class="hidden mt-4 space-y-2">
+                                <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                                    <span>Lendo informações...</span>
+                                    <span id="ocr-progress">0%</span>
                                 </div>
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fazenda</label>
-                                    <input type="text" id="form-farm" list="list-farms" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
-                                    <datalist id="list-farms"></datalist>
+                                <div class="w-full bg-blue-900/30 h-1.5 rounded-full overflow-hidden">
+                                    <div id="ocr-bar" class="bg-white h-full transition-all duration-300" style="width: 0%"></div>
                                 </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Variedade</label>
-                                    <input type="text" id="form-variety" list="list-varieties" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
-                                    <datalist id="list-varieties"></datalist>
-                                </div>
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Romaneio</label>
-                                    <input type="text" id="form-romaneio" placeholder="Nº Romaneio..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
-                                </div>
-                            </div>
-                            <div class="space-y-1">
-                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depositário</label>
-                                <input type="text" id="form-owner" list="list-owners" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
-                                <datalist id="list-owners"></datalist>
-                            </div>
-                            <div class="space-y-1">
-                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Equipe de Colheita</label>
-                                <input type="text" id="form-team" list="list-teams" placeholder="Nome da Equipe..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
-                                <datalist id="list-teams"></datalist>
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazém</label>
-                                    <input type="text" id="form-warehouse" list="list-warehouses" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
-                                    <datalist id="list-warehouses"></datalist>
-                                </div>
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ticket / Ticket</label>
-                                    <input type="text" id="form-ticket" placeholder="Nº..." class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-3 gap-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                <div>
-                                    <label class="block text-[8px] font-black text-slate-400 uppercase">Bruto</label>
-                                    <input type="number" id="form-bruto" oninput="calcLiquido()" required class="w-full bg-transparent border-0 p-0 text-sm font-black focus:ring-0">
-                                </div>
-                                <div>
-                                    <label class="block text-[8px] font-black text-slate-400 uppercase">Tara</label>
-                                    <input type="number" id="form-tara" oninput="calcLiquido()" required class="w-full bg-transparent border-0 p-0 text-sm font-black focus:ring-0">
-                                </div>
-                                <div>
-                                    <label class="block text-[8px] font-black text-red-400 uppercase">Desc.</label>
-                                    <input type="number" id="form-desc" oninput="calcLiquido()" value="0" class="w-full bg-transparent border-0 p-0 text-sm font-black text-red-600 focus:ring-0">
-                                </div>
-                            </div>
-                            <div class="bg-blue-600 p-6 rounded-2xl text-white shadow-lg shadow-blue-100">
-                                <label class="block text-[10px] font-black text-blue-200 uppercase tracking-widest">Peso Líquido Final</label>
-                                <div class="text-3xl font-black"><span id="form-liquido">0</span> <span class="text-sm font-normal">kg</span></div>
                             </div>
                         </div>
-                        <button type="submit" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-200">
-                            SALVAR REGISTRO
-                        </button>
-                    </form>
+
+                        <!-- Formulário -->
+                        <form onsubmit="handleFormSubmit(event)" class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 space-y-6">
+                            <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-4">
+                                <i data-lucide="plus-circle" class="text-blue-600"></i>Dados do Registro
+                            </h3>
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</label>
+                                        <input type="date" id="form-date" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fazenda</label>
+                                        <input type="text" id="form-farm" list="list-farms" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                        <datalist id="list-farms"></datalist>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Variedade</label>
+                                        <input type="text" id="form-variety" list="list-varieties" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                        <datalist id="list-varieties"></datalist>
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Romaneio</label>
+                                        <input type="text" id="form-romaneio" placeholder="Nº Romaneio..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depositário</label>
+                                    <input type="text" id="form-owner" list="list-owners" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                    <datalist id="list-owners"></datalist>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Equipe de Colheita</label>
+                                    <input type="text" id="form-team" list="list-teams" placeholder="Nome da Equipe..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                    <datalist id="list-teams"></datalist>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazém</label>
+                                        <input type="text" id="form-warehouse" list="list-warehouses" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                        <datalist id="list-warehouses"></datalist>
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ticket / Ticket</label>
+                                        <input type="text" id="form-ticket" placeholder="Nº..." class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observação</label>
+                                    <input type="text" id="form-obs" placeholder="Ex: Lacres, motorista..." class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                </div>
+                                <div class="grid grid-cols-3 gap-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <div>
+                                        <label class="block text-[8px] font-black text-slate-400 uppercase">Bruto</label>
+                                        <input type="number" id="form-bruto" oninput="calcLiquido()" required class="w-full bg-transparent border-0 p-0 text-sm font-black focus:ring-0">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[8px] font-black text-slate-400 uppercase">Tara</label>
+                                        <input type="number" id="form-tara" oninput="calcLiquido()" required class="w-full bg-transparent border-0 p-0 text-sm font-black focus:ring-0">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[8px] font-black text-red-400 uppercase">Desc.</label>
+                                        <input type="number" id="form-desc" oninput="calcLiquido()" value="0" class="w-full bg-transparent border-0 p-0 text-sm font-black text-red-600 focus:ring-0">
+                                    </div>
+                                </div>
+                                <div class="bg-blue-600 p-6 rounded-2xl text-white shadow-lg shadow-blue-100">
+                                    <label class="block text-[10px] font-black text-blue-200 uppercase tracking-widest">Peso Líquido Final</label>
+                                    <div class="text-3xl font-black"><span id="form-liquido">0</span> <span class="text-sm font-normal">kg</span></div>
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-200">
+                                SALVAR REGISTRO
+                            </button>
+                        </form>
+                    </div>
                 </div>
                 <div class="lg:col-span-2">
                     <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
@@ -209,7 +251,7 @@
                 </div>
             </section>
 
-            <!-- FARMS SECTION (NEW) -->
+            <!-- FARMS SECTION -->
             <section id="tab-farms" class="hidden space-y-8">
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div class="lg:col-span-1">
@@ -261,7 +303,7 @@
 
     <script>
         // SERVIÇO DE DADOS (LOCALSTORAGE)
-        const STORAGE_KEY = 'soja_app_single_file_data_v3';
+        const STORAGE_KEY = 'soja_app_single_file_data_v4';
         let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
             entries: [],
             farms: [],
@@ -269,12 +311,76 @@
             warehouses: [],
             owners: [],
             teams: [],
-            farmAreas: {} // { farmName: areaValue }
+            farmAreas: {}
         };
 
         function saveToDB() {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
             renderAll();
+        }
+
+        // FUNÇÕES DE OCR (RECONHECIMENTO DE IMAGEM)
+        async function processImage(input) {
+            if (!input.files || !input.files[0]) return;
+            
+            const loader = document.getElementById('ocr-loader');
+            const progressText = document.getElementById('ocr-progress');
+            const progressBar = document.getElementById('ocr-bar');
+            
+            loader.classList.remove('hidden');
+            progressText.innerText = '0%';
+            progressBar.style.width = '0%';
+
+            try {
+                const result = await Tesseract.recognize(
+                    input.files[0],
+                    'por',
+                    { logger: m => {
+                        if (m.status === 'recognizing text') {
+                            const p = Math.round(m.progress * 100);
+                            progressText.innerText = p + '%';
+                            progressBar.style.width = p + '%';
+                        }
+                    }}
+                );
+
+                const text = result.data.text;
+                parseOCRText(text);
+            } catch (err) {
+                console.error(err);
+                alert('Erro ao ler a imagem. Tente uma foto mais nítida.');
+            } finally {
+                loader.classList.add('hidden');
+                input.value = '';
+            }
+        }
+
+        function parseOCRText(text) {
+            console.log("Texto extraído:", text);
+            // Lógica de mapeamento baseada na planilha do usuário
+            const lines = text.split('\n');
+            
+            // Procura por padrões comuns de peso (ex: 117.160,00 ou 117160)
+            const numbers = text.match(/\d+[\.\,]\d+/g) || [];
+            const cleanNumbers = numbers.map(n => parseFloat(n.replace('.', '').replace(',', '.')));
+
+            // Preenchimento inteligente baseado no contexto da planilha enviada
+            if (text.includes('SANTA HELEN')) document.getElementById('form-farm').value = '0157 SANTA HELEN';
+            if (text.includes('LAVA ZOI')) document.getElementById('form-farm').value = '0162 LAVA ZOI';
+            if (text.includes('NEO 680')) document.getElementById('form-variety').value = 'NEO 680 IPRO';
+            if (text.includes('SUSANA')) document.getElementById('form-owner').value = 'SUSANA R. DE M';
+            if (text.includes('AGROMEN')) document.getElementById('form-warehouse').value = 'AGROMEN ARMAZENS GERAIS';
+            
+            // Pega os pesos se encontrar 3 ou mais números grandes
+            const largeNumbers = cleanNumbers.filter(n => n > 100);
+            if (largeNumbers.length >= 3) {
+                document.getElementById('form-bruto').value = largeNumbers[0];
+                document.getElementById('form-tara').value = largeNumbers[1];
+                document.getElementById('form-desc').value = largeNumbers[2];
+                calcLiquido();
+            }
+
+            alert('Dados processados! Verifique os campos preenchidos no formulário.');
         }
 
         // FUNÇÕES DE NAVEGAÇÃO
@@ -308,6 +414,7 @@
             const warehouseName = document.getElementById('form-warehouse').value.trim();
             const teamName = document.getElementById('form-team').value.trim();
             const romaneio = document.getElementById('form-romaneio').value.trim();
+            const obs = document.getElementById('form-obs').value.trim();
             const bruto = parseFloat(document.getElementById('form-bruto').value);
             const tara = parseFloat(document.getElementById('form-tara').value);
             const desc = parseFloat(document.getElementById('form-desc').value) || 0;
@@ -322,6 +429,7 @@
                 warehouse: warehouseName,
                 team: teamName,
                 romaneio: romaneio,
+                obs: obs,
                 ticket: document.getElementById('form-ticket').value,
                 bruto, tara, desc, liquido
             };
@@ -422,7 +530,6 @@
             const totalSacks = totalKg / 60;
             const totalTons = totalKg / 1000;
             
-            // Área real calculada a partir das fazendas que tiveram colheita
             let totalArea = 0;
             const farmsInHarvest = [...new Set(db.entries.map(e => e.farm))];
             farmsInHarvest.forEach(f => {
