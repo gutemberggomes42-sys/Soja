@@ -473,10 +473,16 @@
                         <form onsubmit="handleFarmAreaSubmit(event)" class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 space-y-6">
                             <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-4"><i data-lucide="map" class="text-indigo-600"></i>Área das Fazendas</h3>
                             <div class="space-y-4">
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fazenda</label>
-                                    <input type="text" id="farm-area-name" list="list-farms-config" placeholder="Nome..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
-                                    <datalist id="list-farms-config"></datalist>
+                                <div class="grid grid-cols-3 gap-4">
+                                    <div class="col-span-1 space-y-1">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cód</label>
+                                        <input type="text" id="farm-area-code" placeholder="000" class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                                    </div>
+                                    <div class="col-span-2 space-y-1">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fazenda</label>
+                                        <input type="text" id="farm-area-name" list="list-farms-config" placeholder="Nome..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                                        <datalist id="list-farms-config"></datalist>
+                                    </div>
                                 </div>
                                 <div class="space-y-1">
                                     <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Variedade (Opcional)</label>
@@ -494,7 +500,7 @@
                     <div class="lg:col-span-2">
                         <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                             <div class="p-6 border-b border-slate-50"><h3 class="font-black text-slate-800 flex items-center gap-2"><i data-lucide="list"></i>Áreas Cadastradas</h3></div>
-                            <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50"><th class="px-6 py-4">Fazenda</th><th class="px-6 py-4">Variedade</th><th class="px-6 py-4 text-right">Área (Há)</th><th class="px-6 py-4"></th></tr></thead><tbody id="farms-table-body" class="divide-y divide-slate-50"></tbody></table></div>
+                            <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50"><th class="px-6 py-4">Cód</th><th class="px-6 py-4">Fazenda</th><th class="px-6 py-4">Variedade</th><th class="px-6 py-4 text-right">Área (Há)</th><th class="px-6 py-4"></th></tr></thead><tbody id="farms-table-body" class="divide-y divide-slate-50"></tbody></table></div>
                         </div>
                     </div>
                 </div>
@@ -529,7 +535,8 @@
                             <table class="w-full border-collapse border border-slate-200">
                                 <thead>
                                     <tr class="bg-slate-100 text-slate-700 font-black text-[11px] uppercase tracking-wider text-center">
-                                        <th class="border border-slate-300 px-4 py-4 w-1/4">Fazenda</th>
+                                        <th class="border border-slate-300 px-4 py-4 w-1/12">Cód</th>
+                                        <th class="border border-slate-300 px-4 py-4 w-3/12">Fazenda</th>
                                         <th class="border border-slate-300 px-4 py-4">Variedade</th>
                                         <th class="border border-slate-300 px-4 py-4">Quantidade (T)</th>
                                         <th class="border border-slate-300 px-4 py-4">Quantidade (S)</th>
@@ -834,8 +841,13 @@
                 const bruto = cleanNum(findCol(['Peso Bruto', 'BRUTO', 'P. BRUTO']));
                 const tara = cleanNum(findCol(['Peso Tara', 'TARA', 'P. TARA']));
                 const desc = cleanNum(findCol(['Peso Descontado', 'DESCONTO', 'DESC', 'P. DESC']));
-                const liquido = cleanNum(findCol(['Peso Liq.(Kg)', 'LIQUIDO', 'P. LIQ', 'PESO LIQUIDO']));
+                let liquido = cleanNum(findCol(['Peso Liq.(Kg)', 'LIQUIDO', 'P. LIQ', 'PESO LIQUIDO', 'PESO LIQ']));
                 
+                // Validação matemática: Se o líquido da planilha não bater com Bruto - Tara - Desc, recalculamos
+                if (bruto > 0 && tara > 0 && Math.abs(bruto - tara - desc - liquido) > 1) {
+                    liquido = bruto - tara - desc;
+                }
+
                 return {
                     id: Date.now() + Math.random(),
                     date: parseExcelDate(findCol(['Data/Hora 1', 'DATA', 'DATA HORA'])) || new Date().toISOString().split('T')[0],
@@ -870,26 +882,31 @@
 
                 if (largeNums.length >= 2) {
                     // Tenta extrair Ticket (7 dígitos, geralmente começa com 107)
-                    const ticketMatch = line.match(/\b107\d{4}\b/) || line.match(/\b\d{7}\b/);
+                    // Busca flexível sem \b para casos onde o OCR cola números com letras
+                    const ticketMatch = line.match(/107\d{4}/) || line.match(/\d{7}/);
                     const ticket = ticketMatch ? ticketMatch[0] : '---';
 
                     // Tenta extrair Romaneio (5-6 dígitos, geralmente começa com 16, as vezes com barra)
                     // Removemos o número do ticket da busca do romaneio para não confundir
                     const lineWithoutTicket = line.replace(ticket !== '---' ? ticket : 'NOTHING_TO_REPLACE', '');
-                    const romaneioMatch = lineWithoutTicket.match(/\b16\d{3,4}\b/) || lineWithoutTicket.match(/\b\d{5,6}\b/);
+                    const romaneioMatch = lineWithoutTicket.match(/16\d{3,4}/) || lineWithoutTicket.match(/\d{5,6}/);
                     const romaneio = romaneioMatch ? romaneioMatch[0] : '---';
+
+                    // Tenta capturar Observação: busca por texto em parênteses ou o que sobra no meio da linha
+                    const obsMatch = line.match(/\(([^)]+)\)/);
+                    let detectedObs = obsMatch ? obsMatch[1] : 'Detectado via Foto';
 
                     const row = {
                         id: Date.now() + Math.random(),
                         date: extractField(line, /(\d{2}\/\d{2}\/\d{4})/) || new Date().toISOString().split('T')[0],
-                        farm: detect(line, ['SANTA HELEN', 'LAVA ZOI', 'POUSO DA', 'TRES IRMAS', 'CALIFORNIA', 'SAO JOAO', 'CAMBUI', 'SANTA MARIA', 'NOVA CALIFORNIA', 'PANORAMA', 'MAGNÓLIA', 'BOA ESP', 'SANTA LUZIA']),
+                        farm: detect(line, ['SANTA HELEN', 'LAVA ZOI', 'POUSO DA', 'TRES IRMAS', 'CALIFORNIA', 'SAO JOAO', 'CAMBUI', 'SANTA MARIA', 'NOVA CALIFORNIA', 'PANORAMA', 'MAGNÓLIA', 'BOA ESP', 'SANTA LUZIA', 'LAVA ZOI', 'LAVA Z0I', 'POUSO DA BO']),
                         warehouse: detect(line, ['AGROMEN', 'COMIGO', 'ARMAZENS', 'COAMO', 'CARGILL', 'BUNGE', 'FLORESTA', 'SANTA HELENA']),
                         owner: detect(line, ['SUSANA', 'GUTEMBERG', 'CAMBUI', 'JOAO', 'MARIA']),
                         romaneio: romaneio,
                         variety: detect(line, ['NEO 680', 'IPRO', 'SOJA', 'M7739', 'M6410', 'MONSOY', 'NEOGEN']),
                         team: detect(line, ['FERREIRA', 'ANTONIO AIRES', 'EQUIPE', 'COLHEITA', '0164-C']),
                         ticket: ticket,
-                        obs: 'Detectado via Foto',
+                        obs: detectedObs,
                         bruto: 0, tara: 0, desc: 0, liquido: 0
                     };
 
@@ -1064,7 +1081,7 @@
             };
             db.entries.push(entry);
             ['farms', 'varieties', 'owners', 'warehouses', 'teams'].forEach(k => {
-                const val = entry[k.slice(0, -1 === 'ie' ? -3 : -1)]; // simplificação de chave
+                const val = entry[k.endsWith('ies') ? k.slice(0, -3) + 'y' : k.slice(0, -1)]; // simplificação de chave
                 if (val && !db[k].includes(val)) db[k].push(val);
             });
             // Correção manual das coleções (simplificada acima mas garantida aqui)
@@ -1170,6 +1187,7 @@
 
         function handleFarmAreaSubmit(e) {
             e.preventDefault();
+            const code = document.getElementById('farm-area-code').value.trim();
             const n = document.getElementById('farm-area-name').value.trim();
             const v_name = document.getElementById('farm-area-variety').value.trim() || 'Todas';
             const area = parseFloat(document.getElementById('farm-area-val').value);
@@ -1178,8 +1196,9 @@
                 const existingIdx = db.farmAreas.findIndex(a => a.farm === n && a.variety === v_name);
                 if (existingIdx !== -1) {
                     db.farmAreas[existingIdx].area = area;
+                    db.farmAreas[existingIdx].code = code;
                 } else {
-                    db.farmAreas.push({ farm: n, variety: v_name, area });
+                    db.farmAreas.push({ code, farm: n, variety: v_name, area });
                 }
                 if (!db.farms.includes(n)) db.farms.push(n);
                 
@@ -1212,62 +1231,53 @@
         }
 
         function seedData() {
-            const farmsToSeed = [
-                ["PANORAMA I", 28.51, "MONSOY 7601"], ["PANORAMA I", 215.77, "NEOGEN 790"],
-                ["SANTA HELENA I", 152.33, "NEOGEN 680"], ["NOVA CALIFÓRNIA", 36.00, "NEOGEN 680"],
-                ["NOVA CALIFÓRNIA", 35.62, "NEOGEN 750"], ["SANTA HELENA II", 26.20, "NEOGEN 680"],
-                ["LAVA ZOI", 53.01, "NEOGEN 680"], ["MAGNÓLIA", 71.12, "NEOGEN 790"],
-                ["POUSO DA BOIADA", 14.15, "NEOGEN 680"], ["BOA ESP. HILÁRIO", 77.32, "NEOGEN 790"],
-                ["SANTA LUZIA", 157.85, "NEOGEN 680"], ["SANTA LUZIA", 230.50, "NEOGEN 680"],
-                ["SANTA LUZIA", 9.63, "NEOGEN 790"], ["SÃO JOSE (ARRENDADA)", 117.67, "TORMENTA"],
-                ["SÃO JOSE (ARRENDADA)", 121.59, "NEOGEN 790"], ["SÃO JOSE (ARRENDADA)", 25.09, "MONSOY 7601"],
-                ["LEMBRANÇA", 6.08, "NEOGEN 750"], ["SÃO JOSÉ PRÓPRIA", 14.38, "NEOGEN 700"],
-                ["SÃO JOSÉ PRÓPRIA", 58.96, "TORMENTA"], ["SÃO JOSÉ PRÓPRIA", 210.86, "NEOGEN 790"],
-                ["SÃO JOSÉ PRÓPRIA", 87.44, "MONSOY 7601"], ["CAMPO BELO", 150.05, "NEOGEN 790"],
-                ["ITAJUBÁ", 147.40, "TORMENTA"], ["ALTA VENEZA", 39.87, "TORMENTA"],
-                ["ALTA VENEZA", 30.22, "NEOGEN 750"], ["PRIMAVERA", 135.54, "TORMENTA"],
-                ["NACIONAL", 128.71, "NEOGEN 680"], ["NACIONAL", 400.87, "NEOGEN 790"],
-                ["NACIONAL", 56.20, "TORMENTA"], ["SÃO MATHEUS", 91.23, "NEOGEN 790"],
-                ["FORTALEZA OUROANA", 135.94, "TORMENTA"], ["FORTALEZA TONHÃO A", 73.00, "TORMENTA"],
-                ["FORTALEZA TONHÃO A", 27.74, "NEOGEN 790"], ["FOTALEZA TONHÃO D", 26.45, "NEOGEN 680"],
-                ["INVERNADA PRÓPRIA", 57.29, "NEOGEN 680"], ["INVERNADA", 156.50, "NEOGEN 680"],
-                ["INVERNADA", 281.14, "NEOGEN 680"], ["TRÊS IRMÃS", 85.38, "NEOGEN 680"],
-                ["NOVA CALIFÓRNIA III", 6.38, "NEOGEN 680"], ["FORTALEZA TONHÃO E", 30.29, "NEOGEN 680"],
-                ["NOVO HORIZONTE", 51.72, "NEOGEN 680"], ["QUINO", 154.53, "NEOGEN 680"],
-                ["JOÃO JOSÉ", 26.00, "NEOGEN 700"], ["CABELEIRA MARLI", 259.41, "NEOGEN 750"],
-                ["CACHOEIRA CARNEIRO", 43.60, "NEOGEN 700"], ["MARIA LETICIA", 129.60, "NEOGEN 700"],
-                ["MARIA LETICIA", 29.11, "TORMENTA"], ["INDIANA", 30.92, "NEOGEN 700"],
-                ["VANDERY", 95.74, "NEOGEN 790"], ["LA SILLA", 18.00, "NEOGEN 790"],
-                ["NOVA VENEZA", 43.72, "NEOGEN 790"], ["SÃO CARLOS", 32.43, "NEOGEN 790"],
-                ["SANTA TEREZINHA II", 5.40, "NEOGEN 790"], ["SANTA TEREZINHA", 83.02, "NEOGEN 790"],
-                ["BELA VISTA DIVISA", 58.27, "NEOGEN 790"], ["CABELEIRA INVERNADA", 7.00, "NEOGEN 680"],
-                ["SANTA CAROLINA", 0, "---"], ["SÃO TOMAZ DANIELA", 56.14, "TORMENTA"]
+            // LISTA OFICIAL DEFINITIVA (Total: 5247,86 Há)
+            const officialList = [
+                [141, "0141-PANORAMA II", 7.45, "BONUS 8579 IPRO"], [157, "SANTA HELENA I", 517.54, "NEOGEN 680 IPRO"],
+                [162, "LAVA ZÓIO", 225.29, "M6210 IPRO"], [175, "NOVO HORIZONTE", 311.00, "NEOGEN 750 IPRO"],
+                [175, "NOVO HORIZONTE", 226.19, "BONUS 8579 IPRO"], [182, "0182-FAZ POUSO DA BOIADA", 14.15, "NEOGEN 680 IPRO"],
+                [193, "PANORAMA III", 29.37, "BONUS 8579 IPRO"], [1030, "ORIENTE", 8.20, "M6210 IPRO"],
+                [1078, "CACHOEIRA CABELEIRA", 113.83, "M6210 IPRO"], [1095, "TRÊS IRMÃS", 105.25, "M6210 IPRO"],
+                [1101, "ALTA VENEZA A", 61.52, "M6210 IPRO"], [1125, "LEMBRANÇA", 121.69, "M6210 IPRO"],
+                [1288, "OLHOS D' AGUA", 106.37, "M6210 IPRO"], [1288, "OLHOS D' AGUA", 321.11, "NEOGEN 680 IPRO"],
+                [1288, "OLHOS D' AGUA", 196.18, "NEOGEN 740 IPRO"], [1291, "SANTO EXPEDITO", 38.79, "BONUS 8579 IPRO"],
+                [1292, "NACIONAL", 157.16, "M6210 IPRO"], [1292, "NACIONAL", 274.87, "NEOGEN 740 IPRO"],
+                [1292, "NACIONAL", 105.61, "NEOGEN 750 IPRO"], [1293, "CABELEIRA PAZ CACHOEIRA", 158.04, "M6210 IPRO"],
+                [1293, "CABELEIRA PAZ CACHOEIRA", 102.31, "NEOGEN 740 IPRO"], [1296, "CAMPOS", 146.04, "NEOGEN 750 IPRO"],
+                [1297, "SANTA CLARA", 54.00, "M6210 IPRO"], [1297, "SANTA CLARA", 59.63, "NEOGEN 740 IPRO"],
+                [1301, "NOSSA SENHORA DAS MERCES(DECO)", 63.10, "NEOGEN 740 IPRO"], [1311, "SANTA NARCISA", 22.53, "M6210 IPRO"],
+                [1311, "SANTA NARCISA", 67.63, "NEOGEN 750 IPRO"], [1317, "FAZENDA CABELEIRA (JRM)", 83.76, "NEOGEN 750 IPRO"],
+                [1323, "BRASILÍA PRÓPRIA", 128.48, "BONUS 8579 IPRO"], [1361, "SÃO MATHEUS II", 80.00, "NEOGEN 750 IPRO"],
+                [1361, "SÃO MATHEUS II", 30.55, "BONUS 8579 IPRO"], [1362, "SÃO MATHEUS III", 136.29, "BONUS 8579 IPRO"],
+                [1367, "NOVA FLORESTA A", 67.55, "M6210 IPRO"], [1371, "SERRA AZUL ( GLEBA 2)", 167.77, "BONUS 8579 IPRO"],
+                [1372, "CORREGO FUNDO (GLEBA 3)", 65.40, "BONUS 8579 IPRO"], [1380, "CABELEIRA PAIVA", 32.21, "BONUS 8579 IPRO"],
+                [1400, "SÃO TOMAZ CAB. INVERNADA", 95.11, "BONUS 8579 IPRO"], [1459, "ALTA VENEZA B", 43.17, "M6210 IPRO"],
+                [1460, "ALTA VENEZA C", 30.23, "M6210 IPRO"], [1464, "ITAJUBÁ", 147.40, "M6210 IPRO"],
+                [1099, "GAMELEIRA", 203.61, "BONUS 8579 IPRO"], [1185, "SÃO PAULO", 7.00, "BONUS 8579 IPRO"],
+                [1409, "BAUZINHO LAURO", 92.40, "BONUS 8579 IPRO"], [1373, "SÃO TOMAZ CORREGO FUNDO", 23.54, "BONUS 8579 IPRO"],
+                [1373, "SÃO TOMAZ CORREGO FUNDO", 32.85, "AGN 8019"], [8008, "BAUZINHO CABELEIRA", 19.44, "BONUS 8579 IPRO"],
+                [8061, "SÃO TOMAZ/SÃO PEDRO", 17.03, "AGN 8019"], [1237, "SANTA MARIA", 58.10, "BONUS 8579 IPRO"],
+                [1381, "SANTA FÉ CABELEIRA", 23.88, "NEOGEN 750 IPRO"], [1389, "CABELEIRA CAPELINHA", 11.56, "NEOGEN 750 IPRO"],
+                [1303, "CABELEIRA LEONOR", 35.68, "BONUS 8579 IPRO"]
             ];
 
-            let changed = false;
-            farmsToSeed.forEach(([name, area, variety]) => {
-                if (!db.farms.includes(name)) {
-                    db.farms.push(name);
-                    changed = true;
-                }
-                const existing = db.farmAreas.find(a => a.farm === name && a.variety === variety);
-                if (!existing) {
-                    db.farmAreas.push({ farm: name, variety: variety || 'Todas', area: area });
-                    changed = true;
-                }
+            // RESET COMPLETO para garantir o valor exato de 5247,86 Há
+            db.farmAreas = [];
+            db.farms = [];
+            
+            officialList.forEach(([code, name, area, variety]) => {
+                db.farmAreas.push({ code, farm: name, variety: variety || 'Todas', area: area });
+                if (!db.farms.includes(name)) db.farms.push(name);
             });
 
-            const varieties = ["MONSOY 7601", "NEOGEN 790", "NEOGEN 680", "NEOGEN 750", "TORMENTA", "NEOGEN 700"];
+            const varieties = ["MONSOY 7601", "NEOGEN 790", "NEOGEN 680", "NEOGEN 750", "TORMENTA", "NEOGEN 700", "BONUS 8579 IPRO", "M6210 IPRO", "NEOGEN 740 IPRO", "AGN 8019"];
             varieties.forEach(v => {
-                if (!db.varieties.includes(v)) {
-                    db.varieties.push(v);
-                    changed = true;
-                }
+                if (!db.varieties.includes(v)) db.varieties.push(v);
             });
 
-            if (changed) {
-                saveToDB();
-            }
+            saveToDB();
+            if (window.saveSettingsToFirebase) window.saveSettingsToFirebase('farmAreas', db.farmAreas);
+            console.log("Seed oficial concluído: 5247,86 Há configurados.");
         }
 
         // RENDERS
@@ -1376,12 +1386,13 @@
         function renderFarms() {
             document.getElementById('farms-table-body').innerHTML = db.farmAreas.map((a, idx) => `
                 <tr class="hover:bg-slate-50">
+                    <td class="px-6 py-4 font-mono text-[10px] text-slate-400">${a.code || '---'}</td>
                     <td class="px-6 py-4 font-black uppercase">${a.farm}</td>
                     <td class="px-6 py-4 font-bold text-slate-400">${a.variety}</td>
                     <td class="px-6 py-4 text-right font-bold text-indigo-600">${a.area.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} Há</td>
                     <td class="px-6 py-4 text-right"><button onclick="db.farmAreas.splice(${idx},1);saveToDB()" class="text-slate-300 hover:text-red-500"><i data-lucide="trash-2" size="16"></i></button></td>
                 </tr>
-            `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhuma área cadastrada</td></tr>';
+            `).join('') || '<tr><td colspan="5" class="py-12 text-center text-slate-300">Nenhuma área cadastrada</td></tr>';
         }
 
         function renderDatalists() {
@@ -1416,13 +1427,26 @@
             // Helper para normalizar nomes de fazenda (remove prefixos como 0157 e espaços)
             const normalizeFarm = (name) => {
                 const norm = name.replace(/^\d+\s*/, '').trim().toUpperCase();
-                return norm || name.trim().toUpperCase(); // Fallback para o nome original se ficar vazio
+                return norm || name.trim().toUpperCase(); 
+            };
+
+            // Helper para extrair apenas o código numérico do início do nome (ex: 0157 -> 157)
+            const extractCode = (name) => {
+                const match = name.match(/^(\d+)/);
+                return match ? parseInt(match[1]) : null;
+            };
+
+            // Helper para normalizar variedades (ex: NEO 680 IPRO -> 680)
+            const normalizeVariety = (v) => {
+                if (!v) return '';
+                const match = v.match(/(\d{3,4})/); // Busca o número da variedade (ex: 680, 790, 7601)
+                return match ? match[1] : v.trim().toUpperCase();
             };
 
             // Inicializa com áreas cadastradas
             db.farmAreas.forEach(area => {
                 const farmKey = normalizeFarm(area.farm);
-                if (!reportData[farmKey]) reportData[farmKey] = { displayName: area.farm, varieties: {} };
+                if (!reportData[farmKey]) reportData[farmKey] = { displayName: area.farm, code: area.code, varieties: {} };
                 
                 reportData[farmKey].varieties[area.variety] = { 
                     area: area.area, 
@@ -1431,29 +1455,55 @@
                 };
             });
 
-            // Soma colheitas reais usando busca flexível
+            // Soma colheitas reais usando busca inteligente
             db.entries.forEach(entry => {
+                const entryFarmCode = extractCode(entry.farm);
                 const entryFarmKey = normalizeFarm(entry.farm);
+                const entryVarietyNorm = normalizeVariety(entry.variety);
                 
-                // Busca se a fazenda da colheita existe no mapeamento de áreas
-                let targetFarmKey = Object.keys(reportData).find(k => k === entryFarmKey || k.includes(entryFarmKey) || entryFarmKey.includes(k));
+                // 1. Tenta encontrar a fazenda pelo CÓDIGO (mais preciso)
+                let targetFarmKey = null;
+                if (entryFarmCode) {
+                    targetFarmKey = Object.keys(reportData).find(k => parseInt(reportData[k].code) === entryFarmCode);
+                }
+                
+                // 2. Se não achou por código, tenta por NOME (fuzzy match)
+                if (!targetFarmKey) {
+                    targetFarmKey = Object.keys(reportData).find(k => k === entryFarmKey || k.includes(entryFarmKey) || entryFarmKey.includes(k));
+                }
                 
                 if (targetFarmKey) {
-                    // Se a variedade exata estiver cadastrada, soma nela
-                    if (reportData[targetFarmKey].varieties[entry.variety]) {
-                        reportData[targetFarmKey].varieties[entry.variety].pesoKg += entry.liquido;
-                        reportData[targetFarmKey].varieties[entry.variety].sacos += (entry.liquido / 60);
-                    } 
-                    // Se não houver a variedade exata, mas houver 'Todas' cadastrado, soma em 'Todas'
-                    else if (reportData[targetFarmKey].varieties['Todas']) {
-                        reportData[targetFarmKey].varieties['Todas'].pesoKg += entry.liquido;
-                        reportData[targetFarmKey].varieties['Todas'].sacos += (entry.liquido / 60);
+                    const farmObj = reportData[targetFarmKey];
+                    
+                    // 3. Tenta encontrar a variedade correta dentro da fazenda
+                    let targetVariety = Object.keys(farmObj.varieties).find(v => {
+                        if (v === 'Todas') return false;
+                        const vNorm = normalizeVariety(v);
+                        return vNorm === entryVarietyNorm || v.includes(entryVarietyNorm) || entryVarietyNorm.includes(vNorm);
+                    });
+
+                    // Se não achou a variedade específica, tenta usar 'Todas'
+                    if (!targetVariety && farmObj.varieties['Todas']) {
+                        targetVariety = 'Todas';
+                    }
+
+                    if (targetVariety) {
+                        farmObj.varieties[targetVariety].pesoKg += entry.liquido;
+                        farmObj.varieties[targetVariety].sacos += (entry.liquido / 60);
                     }
                 }
-                // Se a fazenda não estiver nas Áreas Cadastradas, o registro é ignorado no relatório de produtividade
             });
 
-            const sortedFarms = Object.keys(reportData).sort();
+            // Ordenação: 1º Quem tem produção (farmTotalKg > 0), 2º Nome alfabético
+            const sortedFarms = Object.keys(reportData).sort((a, b) => {
+                const totalA = Object.values(reportData[a].varieties).reduce((acc, v) => acc + v.pesoKg, 0);
+                const totalB = Object.values(reportData[b].varieties).reduce((acc, v) => acc + v.pesoKg, 0);
+                
+                if (totalA > 0 && totalB === 0) return -1;
+                if (totalA === 0 && totalB > 0) return 1;
+                return a.localeCompare(b);
+            });
+
             let html = '';
 
             sortedFarms.forEach(farmKey => {
@@ -1467,6 +1517,9 @@
                     
                     html += `
                         <tr class="${idx === 0 ? 'bg-slate-50/30' : ''}">
+                            <td class="border border-slate-200 px-4 py-3 font-mono text-[10px] ${idx > 0 ? 'text-slate-300' : 'text-slate-400'}">
+                                ${farmObj.code || '---'}
+                            </td>
                             <td class="border border-slate-200 px-4 py-3 text-left font-black uppercase ${idx > 0 ? 'text-slate-400' : ''}">
                                 ${farmObj.displayName}
                             </td>
