@@ -101,18 +101,18 @@
                         <div class="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-[2rem] shadow-xl text-white relative overflow-hidden group">
                             <i data-lucide="sparkles" class="absolute -right-4 -top-4 text-white/10 group-hover:scale-110 transition-transform" size="120"></i>
                             <h3 class="text-lg font-black mb-2 flex items-center gap-2">
-                                <i data-lucide="scan-text"></i>Lançamento Inteligente
+                                <i data-lucide="scan-text"></i>Lançamento Múltiplo
                             </h3>
-                            <p class="text-xs text-blue-100 mb-6 font-medium leading-relaxed">Envie uma foto da sua planilha ou romaneio e o sistema preencherá os dados automaticamente.</p>
+                            <p class="text-xs text-blue-100 mb-6 font-medium leading-relaxed">Envie uma foto da sua planilha e o sistema identificará todas as linhas de colheita automaticamente.</p>
                             
                             <label class="cursor-pointer bg-white text-blue-700 px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-blue-50 transition-all active:scale-95 shadow-lg shadow-blue-900/20">
-                                <i data-lucide="camera"></i>ESCANEAR IMAGEM
+                                <i data-lucide="camera"></i>ESCANEAR PLANILHA
                                 <input type="file" id="ocr-upload" accept="image/*" class="hidden" onchange="processImage(this)">
                             </label>
                             
                             <div id="ocr-loader" class="hidden mt-4 space-y-2">
                                 <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-                                    <span>Lendo informações...</span>
+                                    <span>Analisando planilha...</span>
                                     <span id="ocr-progress">0%</span>
                                 </div>
                                 <div class="w-full bg-blue-900/30 h-1.5 rounded-full overflow-hidden">
@@ -121,10 +121,10 @@
                             </div>
                         </div>
 
-                        <!-- Formulário -->
+                        <!-- Formulário Manual -->
                         <form onsubmit="handleFormSubmit(event)" class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 space-y-6">
                             <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-4">
-                                <i data-lucide="plus-circle" class="text-blue-600"></i>Dados do Registro
+                                <i data-lucide="plus-circle" class="text-blue-600"></i>Lançamento Manual
                             </h3>
                             <div class="space-y-4">
                                 <div class="grid grid-cols-2 gap-4">
@@ -199,7 +199,41 @@
                         </form>
                     </div>
                 </div>
-                <div class="lg:col-span-2">
+
+                <!-- Tabela de Lançamentos Extraídos (Preview OCR) ou Últimos Lançamentos -->
+                <div class="lg:col-span-2 space-y-8">
+                    <!-- PREVIEW OCR SECTION -->
+                    <div id="ocr-preview-section" class="hidden bg-amber-50 rounded-[2rem] border-2 border-amber-200 shadow-lg overflow-hidden animate-in fade-in duration-500">
+                        <div class="p-6 border-b border-amber-200 flex items-center justify-between bg-amber-100/50">
+                            <div>
+                                <h3 class="font-black text-amber-900 flex items-center gap-2"><i data-lucide="eye"></i>Conferir Dados Extraídos</h3>
+                                <p class="text-xs text-amber-700 font-bold uppercase tracking-wider">Verifique antes de salvar em massa</p>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="clearOCRPreview()" class="px-4 py-2 bg-white text-slate-600 rounded-xl text-xs font-black hover:bg-slate-100 border border-slate-200 transition-all">CANCELAR</button>
+                                <button onclick="saveBulkEntries()" class="px-6 py-2 bg-green-600 text-white rounded-xl text-xs font-black hover:bg-green-700 shadow-lg shadow-green-100 transition-all">CONFIRMAR TUDO</button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr class="text-amber-900/50 font-bold text-[10px] uppercase tracking-widest border-b border-amber-200">
+                                        <th class="px-6 py-4">Fazenda</th>
+                                        <th class="px-6 py-4">Romaneio</th>
+                                        <th class="px-6 py-4">Equipe</th>
+                                        <th class="px-6 py-4 text-right">Bruto (kg)</th>
+                                        <th class="px-6 py-4 text-right">Líquido (kg)</th>
+                                        <th class="px-6 py-4"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ocr-preview-body" class="divide-y divide-amber-100">
+                                    <!-- Preview via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- ULTIMOS LANÇAMENTOS -->
                     <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                         <div class="p-6 border-b border-slate-50 flex items-center justify-between">
                             <h3 class="font-black text-slate-800 flex items-center gap-2"><i data-lucide="history"></i>Últimos Lançamentos</h3>
@@ -303,7 +337,7 @@
 
     <script>
         // SERVIÇO DE DADOS (LOCALSTORAGE)
-        const STORAGE_KEY = 'soja_app_single_file_data_v4';
+        const STORAGE_KEY = 'soja_app_single_file_data_v5';
         let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
             entries: [],
             farms: [],
@@ -314,12 +348,14 @@
             farmAreas: {}
         };
 
+        let ocrPreviewData = []; // Armazena dados extraídos temporariamente
+
         function saveToDB() {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
             renderAll();
         }
 
-        // FUNÇÕES DE OCR (RECONHECIMENTO DE IMAGEM)
+        // FUNÇÕES DE OCR (RECONHECIMENTO DE IMAGEM MULTI-LINHA)
         async function processImage(input) {
             if (!input.files || !input.files[0]) return;
             
@@ -344,43 +380,133 @@
                     }}
                 );
 
-                const text = result.data.text;
-                parseOCRText(text);
+                parseOCRMultiLine(result.data.text);
             } catch (err) {
                 console.error(err);
-                alert('Erro ao ler a imagem. Tente uma foto mais nítida.');
+                alert('Erro ao ler a planilha. Tente uma foto mais nítida.');
             } finally {
                 loader.classList.add('hidden');
                 input.value = '';
             }
         }
 
-        function parseOCRText(text) {
-            console.log("Texto extraído:", text);
-            // Lógica de mapeamento baseada na planilha do usuário
-            const lines = text.split('\n');
-            
-            // Procura por padrões comuns de peso (ex: 117.160,00 ou 117160)
-            const numbers = text.match(/\d+[\.\,]\d+/g) || [];
-            const cleanNumbers = numbers.map(n => parseFloat(n.replace('.', '').replace(',', '.')));
+        function parseOCRMultiLine(text) {
+            console.log("Texto extraído total:", text);
+            const lines = text.split('\n').filter(l => l.trim().length > 10); // Filtra linhas vazias ou muito curtas
+            ocrPreviewData = [];
 
-            // Preenchimento inteligente baseado no contexto da planilha enviada
-            if (text.includes('SANTA HELEN')) document.getElementById('form-farm').value = '0157 SANTA HELEN';
-            if (text.includes('LAVA ZOI')) document.getElementById('form-farm').value = '0162 LAVA ZOI';
-            if (text.includes('NEO 680')) document.getElementById('form-variety').value = 'NEO 680 IPRO';
-            if (text.includes('SUSANA')) document.getElementById('form-owner').value = 'SUSANA R. DE M';
-            if (text.includes('AGROMEN')) document.getElementById('form-warehouse').value = 'AGROMEN ARMAZENS GERAIS';
-            
-            // Pega os pesos se encontrar 3 ou mais números grandes
-            const largeNumbers = cleanNumbers.filter(n => n > 100);
-            if (largeNumbers.length >= 3) {
-                document.getElementById('form-bruto').value = largeNumbers[0];
-                document.getElementById('form-tara').value = largeNumbers[1];
-                document.getElementById('form-desc').value = largeNumbers[2];
-                calcLiquido();
+            lines.forEach(line => {
+                // Tenta encontrar padrões de peso e nomes conhecidos em cada linha
+                const numbers = line.match(/\d+[\.\,]\d+/g) || [];
+                const cleanNumbers = numbers.map(n => parseFloat(n.replace('.', '').replace(',', '.')));
+                const largeNumbers = cleanNumbers.filter(n => n > 100);
+
+                // Só considera linha de dados se tiver pelo menos 3 números grandes (Bruto, Tara, Liquido)
+                if (largeNumbers.length >= 3) {
+                    const extracted = {
+                        id: Date.now() + Math.random(),
+                        date: new Date().toISOString().split('T')[0], // Padrão hoje
+                        farm: 'Detectando...',
+                        variety: 'Detectando...',
+                        owner: 'Detectando...',
+                        warehouse: 'Detectando...',
+                        team: 'Detectando...',
+                        romaneio: '---',
+                        bruto: largeNumbers[0],
+                        tara: largeNumbers[1],
+                        desc: largeNumbers.length > 3 ? largeNumbers[2] : 0,
+                        liquido: largeNumbers[largeNumbers.length - 1]
+                    };
+
+                    // Busca nomes conhecidos na linha
+                    if (line.includes('SANTA HELEN')) extracted.farm = '0157 SANTA HELEN';
+                    else if (line.includes('LAVA ZOI')) extracted.farm = '0162 LAVA ZOI';
+                    else if (line.includes('POUSO DA')) extracted.farm = '0182 POUSO DA BO';
+                    else if (line.includes('TRES IRMAS')) extracted.farm = '1095 TRES IRMAS';
+                    else if (line.includes('CALIFORNIA')) extracted.farm = '1538 NOVA CALIFORNIA';
+
+                    if (line.includes('NEO 680')) extracted.variety = 'NEO 680 IPRO';
+                    if (line.includes('SUSANA')) extracted.owner = 'SUSANA R. DE M';
+                    if (line.includes('AGROMEN')) extracted.warehouse = 'AGROMEN ARMAZENS';
+                    else if (line.includes('COMIGO')) extracted.warehouse = 'COMIGO';
+
+                    // Tenta achar o romaneio (número de 5 ou 6 dígitos antes da data)
+                    const romMatch = line.match(/\d{5,6}/);
+                    if (romMatch) extracted.romaneio = romMatch[0];
+
+                    ocrPreviewData.push(extracted);
+                }
+            });
+
+            if (ocrPreviewData.length > 0) {
+                renderOCRPreview();
+            } else {
+                alert('Não foi possível identificar linhas de dados na imagem. Verifique a qualidade da foto.');
             }
+        }
 
-            alert('Dados processados! Verifique os campos preenchidos no formulário.');
+        function renderOCRPreview() {
+            const section = document.getElementById('ocr-preview-section');
+            const tbody = document.getElementById('ocr-preview-body');
+            section.classList.remove('hidden');
+
+            tbody.innerHTML = ocrPreviewData.map((e, idx) => `
+                <tr class="hover:bg-amber-100/50 transition-colors">
+                    <td class="px-6 py-4">
+                        <input type="text" value="${e.farm}" onchange="updateOCRItem(${idx}, 'farm', this.value)" class="bg-transparent border-0 border-b border-amber-300 w-full text-xs font-bold focus:ring-0">
+                    </td>
+                    <td class="px-6 py-4">
+                        <input type="text" value="${e.romaneio}" onchange="updateOCRItem(${idx}, 'romaneio', this.value)" class="bg-transparent border-0 border-b border-amber-300 w-full text-xs font-bold focus:ring-0">
+                    </td>
+                    <td class="px-6 py-4">
+                        <input type="text" value="${e.team}" onchange="updateOCRItem(${idx}, 'team', this.value)" class="bg-transparent border-0 border-b border-amber-300 w-full text-xs font-bold focus:ring-0">
+                    </td>
+                    <td class="px-6 py-4 text-right font-bold text-slate-600">${e.bruto.toLocaleString('pt-BR')}</td>
+                    <td class="px-6 py-4 text-right font-black text-slate-900">${e.liquido.toLocaleString('pt-BR')}</td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="removeOCRItem(${idx})" class="text-amber-400 hover:text-red-500"><i data-lucide="x-circle" size="18"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function updateOCRItem(idx, field, val) {
+            ocrPreviewData[idx][field] = val;
+        }
+
+        function removeOCRItem(idx) {
+            ocrPreviewData.splice(idx, 1);
+            if (ocrPreviewData.length === 0) clearOCRPreview();
+            else renderOCRPreview();
+        }
+
+        function clearOCRPreview() {
+            document.getElementById('ocr-preview-section').classList.add('hidden');
+            ocrPreviewData = [];
+        }
+
+        function saveBulkEntries() {
+            if (confirm(`Deseja salvar estes ${ocrPreviewData.length} lançamentos?`)) {
+                ocrPreviewData.forEach(e => {
+                    const entry = {
+                        ...e,
+                        id: Date.now() + Math.random(),
+                        obs: 'Lançamento via OCR'
+                    };
+                    db.entries.push(entry);
+                    
+                    // Adiciona nomes às coleções se forem novos
+                    if (e.farm !== 'Detectando...' && !db.farms.includes(e.farm)) db.farms.push(e.farm);
+                    if (e.variety !== 'Detectando...' && !db.varieties.includes(e.variety)) db.varieties.push(e.variety);
+                    if (e.owner !== 'Detectando...' && !db.owners.includes(e.owner)) db.owners.push(e.owner);
+                    if (e.warehouse !== 'Detectando...' && !db.warehouses.includes(e.warehouse)) db.warehouses.push(e.warehouse);
+                    if (e.team !== 'Detectando...' && !db.teams.includes(e.team)) db.teams.push(e.team);
+                });
+                saveToDB();
+                clearOCRPreview();
+                alert('Todos os registros foram salvos com sucesso!');
+            }
         }
 
         // FUNÇÕES DE NAVEGAÇÃO
@@ -397,7 +523,7 @@
             renderAll();
         }
 
-        // LÓGICA DE FORMULÁRIO
+        // LÓGICA DE FORMULÁRIO MANUAL
         function calcLiquido() {
             const bruto = parseFloat(document.getElementById('form-bruto').value) || 0;
             const tara = parseFloat(document.getElementById('form-tara').value) || 0;
