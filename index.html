@@ -74,36 +74,32 @@
                 const isAdmin = user.email === 'gutemberggg10@gmail.com';
                 window.currentUserIsAdmin = isAdmin;
                 
-                // Aplica restrições de UI baseadas no perfil
-                applyAdminRestrictions(isAdmin);
+                // Aplica classe is-admin ao body para controle via CSS
+                if (isAdmin) {
+                    document.body.classList.add('is-admin');
+                } else {
+                    document.body.classList.remove('is-admin');
+                }
+                
+                // Desativa inputs para não-admin
+                if (!isAdmin) {
+                    const forms = document.querySelectorAll('form');
+                    forms.forEach(form => {
+                        if (!form.id.includes('filter')) { // Não bloqueia filtros
+                            const inputs = form.querySelectorAll('input, select, button[type="submit"]');
+                            inputs.forEach(i => i.disabled = true);
+                        }
+                    });
+                }
                 
                 // Inicializa Listeners para Sincronização em Tempo Real
                 setupRealtimeSync();
             } else {
                 loginScreen.classList.remove('hidden');
                 appContent.classList.add('hidden');
+                document.body.classList.remove('is-admin');
             }
         });
-
-        function applyAdminRestrictions(isAdmin) {
-            // Oculta/Exibe elementos de escrita usando uma classe CSS
-            const adminOnlyElements = document.querySelectorAll('.admin-only');
-            adminOnlyElements.forEach(el => {
-                if (isAdmin) el.classList.remove('hidden');
-                else el.classList.add('hidden');
-            });
-
-            // Se não for admin, desativa formulários
-            if (!isAdmin) {
-                const forms = document.querySelectorAll('form');
-                forms.forEach(form => {
-                    if (!form.id.includes('filter')) { // Não bloqueia filtros
-                        const inputs = form.querySelectorAll('input, select, button[type="submit"]');
-                        inputs.forEach(i => i.disabled = true);
-                    }
-                });
-            }
-        }
 
         async function setupRealtimeSync() {
             // Sincroniza Entradas de Colheita
@@ -203,6 +199,14 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
+        
+        /* Controle de Acesso Global */
+        .admin-only { display: none !important; }
+        body.is-admin .admin-only { display: block !important; }
+        body.is-admin .admin-only.flex { display: flex !important; }
+        body.is-admin .admin-only.grid { display: grid !important; }
+        body.is-admin .admin-only.inline-flex { display: inline-flex !important; }
+
         .tab-active { color: #2563eb; border-bottom: 2px solid #2563eb; }
         .tab-inactive { color: #64748b; }
         .tab-inactive:hover { color: #334155; }
@@ -1856,10 +1860,10 @@
                             <button onclick="printEntry(${e.id})" class="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Imprimir">
                                 <i data-lucide="printer" size="16"></i>
                             </button>
-                            <button onclick="openEditModal(${e.id})" class="p-2 text-slate-400 hover:text-amber-600 transition-colors admin-only" title="Editar">
+                            <button onclick="if(window.currentUserIsAdmin) openEditModal(${e.id})" class="p-2 text-slate-400 hover:text-amber-600 transition-colors admin-only" title="Editar">
                                 <i data-lucide="edit-3" size="16"></i>
                             </button>
-                            <button onclick="if(confirm('Excluir?')){ if(window.deleteEntryFromFirebase) window.deleteEntryFromFirebase(${e.id}); db.entries=db.entries.filter(x=>x.id!==${e.id}); saveToDB()}" class="p-2 text-slate-300 hover:text-red-500 transition-colors admin-only" title="Excluir">
+                            <button onclick="if(window.currentUserIsAdmin && confirm('Excluir?')){ if(window.deleteEntryFromFirebase) window.deleteEntryFromFirebase(${e.id}); db.entries=db.entries.filter(x=>x.id!==${e.id}); saveToDB()}" class="p-2 text-slate-300 hover:text-red-500 transition-colors admin-only" title="Excluir">
                                 <i data-lucide="trash-2" size="16"></i>
                             </button>
                         </div>
@@ -1994,7 +1998,7 @@
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${isComplete ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'}">
                                     ${isComplete ? 'Concluído' : 'Em Fluxo'}
                                 </span>
-                                <button onclick="if(confirm('Excluir este romaneio?')){ if(window.deleteEntryFromFirebase) window.deleteEntryFromFirebase(${e.id}); db.entries=db.entries.filter(x=>x.id!==${e.id}); saveToDB()}" class="p-2 text-slate-300 hover:text-red-500 transition-colors admin-only" title="Excluir">
+                                <button onclick="if(window.currentUserIsAdmin && confirm('Excluir este romaneio?')){ if(window.deleteEntryFromFirebase) window.deleteEntryFromFirebase(${e.id}); db.entries=db.entries.filter(x=>x.id!==${e.id}); saveToDB()}" class="p-2 text-slate-300 hover:text-red-500 transition-colors admin-only" title="Excluir">
                                     <i data-lucide="trash-2" size="14"></i>
                                 </button>
                             </div>
@@ -2066,7 +2070,11 @@
                     <td class="px-6 py-4 font-black uppercase">${a.farm}</td>
                     <td class="px-6 py-4 font-bold text-slate-400">${a.variety}</td>
                     <td class="px-6 py-4 text-right font-bold text-indigo-600">${a.area.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Há</td>
-                    <td class="px-6 py-4 text-right"><button onclick="if(window.currentUserIsAdmin) { db.farmAreas.splice(${idx},1);saveToDB() }" class="text-slate-300 hover:text-red-500 admin-only"><i data-lucide="trash-2" size="16"></i></button></td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="if(window.currentUserIsAdmin && confirm('Excluir?')){ db.farmAreas.splice(${idx},1);saveToDB() }" class="text-slate-300 hover:text-red-500 transition-colors admin-only">
+                            <i data-lucide="trash-2" size="16"></i>
+                        </button>
+                    </td>
                 </tr>
             `).join('') || '<tr><td colspan="5" class="py-12 text-center text-slate-300">Nenhuma área cadastrada</td></tr>';
         }
@@ -2390,8 +2398,8 @@
                         <td class="border border-slate-200 px-4 py-4 font-black">${depS.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
                         <td class="border border-slate-200 px-4 py-4 ${diffT < 0 ? 'text-red-600' : 'text-green-600'}">${diffT.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                         <td class="border border-slate-200 px-4 py-4 ${diffS < 0 ? 'text-red-600' : 'text-green-600'}">${diffS.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
-                        <td class="border border-slate-200 px-2 py-2 print:hidden admin-only">
-                            <button onclick="if(window.currentUserIsAdmin) { db.depositaryTargets=db.depositaryTargets.filter(t=>!(t.owner==='${d.owner}' && t.warehouse==='${d.warehouse}')); if(window.saveSettingsToFirebase) window.saveSettingsToFirebase('depositaryTargets', db.depositaryTargets); saveToDB() }" class="text-slate-300 hover:text-red-500 transition-colors">
+                        <td class="border border-slate-200 px-2 py-2 print:hidden">
+                            <button onclick="if(window.currentUserIsAdmin && confirm('Excluir meta?')){ db.depositaryTargets=db.depositaryTargets.filter(t=>!(t.owner==='${d.owner}' && t.warehouse==='${d.warehouse}')); if(window.saveSettingsToFirebase) window.saveSettingsToFirebase('depositaryTargets', db.depositaryTargets); saveToDB() }" class="text-slate-300 hover:text-red-500 transition-colors admin-only">
                                 <i data-lucide="trash-2" size="14"></i>
                             </button>
                         </td>
