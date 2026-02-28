@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import HarvestLog from './pages/HarvestLog';
@@ -7,7 +7,7 @@ import Depositaries from './pages/Depositaries';
 
 function App() {
   return (
-    <Router basename="/Soja">
+    <Router>
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
