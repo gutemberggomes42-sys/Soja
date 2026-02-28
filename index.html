@@ -1415,7 +1415,8 @@
             
             // Helper para normalizar nomes de fazenda (remove prefixos como 0157 e espaços)
             const normalizeFarm = (name) => {
-                return name.replace(/^\d+\s*/, '').trim().toUpperCase();
+                const norm = name.replace(/^\d+\s*/, '').trim().toUpperCase();
+                return norm || name.trim().toUpperCase(); // Fallback para o nome original se ficar vazio
             };
 
             // Inicializa com áreas cadastradas
@@ -1437,17 +1438,19 @@
                 // Busca se a fazenda da colheita existe no mapeamento de áreas
                 let targetFarmKey = Object.keys(reportData).find(k => k === entryFarmKey || k.includes(entryFarmKey) || entryFarmKey.includes(k));
                 
-                if (!targetFarmKey) {
-                    targetFarmKey = entryFarmKey;
-                    reportData[targetFarmKey] = { displayName: entry.farm, varieties: {} };
+                if (targetFarmKey) {
+                    // Se a variedade exata estiver cadastrada, soma nela
+                    if (reportData[targetFarmKey].varieties[entry.variety]) {
+                        reportData[targetFarmKey].varieties[entry.variety].pesoKg += entry.liquido;
+                        reportData[targetFarmKey].varieties[entry.variety].sacos += (entry.liquido / 60);
+                    } 
+                    // Se não houver a variedade exata, mas houver 'Todas' cadastrado, soma em 'Todas'
+                    else if (reportData[targetFarmKey].varieties['Todas']) {
+                        reportData[targetFarmKey].varieties['Todas'].pesoKg += entry.liquido;
+                        reportData[targetFarmKey].varieties['Todas'].sacos += (entry.liquido / 60);
+                    }
                 }
-
-                if (!reportData[targetFarmKey].varieties[entry.variety]) {
-                    reportData[targetFarmKey].varieties[entry.variety] = { area: 0, pesoKg: 0, sacos: 0 };
-                }
-                
-                reportData[targetFarmKey].varieties[entry.variety].pesoKg += entry.liquido;
-                reportData[targetFarmKey].varieties[entry.variety].sacos += (entry.liquido / 60);
+                // Se a fazenda não estiver nas Áreas Cadastradas, o registro é ignorado no relatório de produtividade
             });
 
             const sortedFarms = Object.keys(reportData).sort();
@@ -1464,8 +1467,8 @@
                     
                     html += `
                         <tr class="${idx === 0 ? 'bg-slate-50/30' : ''}">
-                            <td class="border border-slate-200 px-4 py-3 text-left font-black uppercase ${idx > 0 ? 'text-slate-300' : ''}">
-                                ${idx === 0 ? farmObj.displayName : ''}
+                            <td class="border border-slate-200 px-4 py-3 text-left font-black uppercase ${idx > 0 ? 'text-slate-400' : ''}">
+                                ${farmObj.displayName}
                             </td>
                             <td class="border border-slate-200 px-4 py-3 font-bold text-slate-600">${variety}</td>
                             <td class="border border-slate-200 px-4 py-3 text-right">${data.pesoKg > 0 ? (data.pesoKg/1000).toLocaleString('pt-BR', { minimumFractionDigits: 3 }) : '-'}</td>
