@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cambuí - Colheita de Soja 2024/2025</title>
+    <title>Cambuí - Colheita de Soja 2025/2026</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -197,7 +197,7 @@
                     <i data-lucide="sprout" class="text-blue-600" size="40"></i>
                 </div>
                 <h1 class="text-3xl font-black text-slate-800 tracking-tight">Cambuí Soja</h1>
-                <p class="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em]">Gestão de Colheita 24/25</p>
+                <p class="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em]">Gestão de Colheita 25/26</p>
             </div>
             
             <div class="py-4">
@@ -422,9 +422,19 @@
 
                     <!-- ÚLTIMOS LANÇAMENTOS -->
                     <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-                        <div class="p-6 border-b border-slate-50">
-                            <h3 class="font-black text-slate-800 flex items-center gap-2"><i data-lucide="history"></i>Histórico Oficial</h3>
+                    <div class="p-6 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <h3 class="font-black text-slate-800 flex items-center gap-2"><i data-lucide="history"></i>Histórico Oficial</h3>
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <div class="relative">
+                                <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size="14"></i>
+                                <input type="text" id="filter-harvest-farm" oninput="renderHarvest()" placeholder="Fazenda..." class="pl-9 pr-3 py-2 bg-slate-50 border-0 rounded-xl text-[10px] font-bold focus:ring-2 focus:ring-blue-500 w-full sm:w-40">
+                            </div>
+                            <div class="relative">
+                                <i data-lucide="filter" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size="14"></i>
+                                <input type="text" id="filter-harvest-variety" oninput="renderHarvest()" placeholder="Variedade..." class="pl-9 pr-3 py-2 bg-slate-50 border-0 rounded-xl text-[10px] font-bold focus:ring-2 focus:ring-blue-500 w-full sm:w-32">
+                            </div>
                         </div>
+                    </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-sm">
                                 <thead>
@@ -513,6 +523,9 @@
                     <button onclick="switchReport('sacks')" id="btn-rep-sacks" class="flex-1 py-6 bg-white rounded-3xl shadow-sm border-2 border-blue-600 text-blue-600 font-black flex items-center justify-center gap-3 transition-all hover:bg-blue-50">
                         <i data-lucide="bar-chart-3"></i> CONTROLE DE SACOS POR HÁ
                     </button>
+                    <button onclick="switchReport('team')" id="btn-rep-team" class="flex-1 py-6 bg-white rounded-3xl shadow-sm border-2 border-transparent text-slate-400 font-black flex items-center justify-center gap-3 transition-all hover:bg-slate-50">
+                        <i data-lucide="users"></i> PRODUÇÃO POR EQUIPE
+                    </button>
                     <button onclick="switchReport('depositary')" id="btn-rep-dep" class="flex-1 py-6 bg-white rounded-3xl shadow-sm border-2 border-transparent text-slate-400 font-black flex items-center justify-center gap-3 transition-all hover:bg-slate-50">
                         <i data-lucide="landmark"></i> DEPOSITÁRIO SOJA
                     </button>
@@ -526,9 +539,19 @@
                                 <h2 class="text-3xl font-black text-slate-800 tracking-tight">Controle de Sacos por Há</h2>
                                 <p class="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">Produtividade e Rendimento Safra 2024/2025</p>
                             </div>
-                            <button onclick="window.print()" class="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
-                                <i data-lucide="printer" size="16"></i> IMPRIMIR RELATÓRIO
-                            </button>
+                            <div class="flex flex-col sm:flex-row gap-4 print:hidden">
+                                <div class="relative">
+                                    <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size="16"></i>
+                                    <input type="text" id="filter-rep-farm" oninput="renderSacksPerHaReport()" placeholder="Filtrar Fazenda..." class="pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-blue-500 transition-all w-full sm:w-64">
+                                </div>
+                                <div class="relative">
+                                    <i data-lucide="filter" class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size="16"></i>
+                                    <input type="text" id="filter-rep-variety" oninput="renderSacksPerHaReport()" placeholder="Filtrar Variedade..." class="pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-blue-500 transition-all w-full sm:w-48">
+                                </div>
+                                <button onclick="window.print()" class="flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
+                                    <i data-lucide="printer" size="16"></i> IMPRIMIR
+                                </button>
+                            </div>
                         </div>
                         
                         <div class="overflow-x-auto p-4 md:p-8">
@@ -546,6 +569,52 @@
                                     </tr>
                                 </thead>
                                 <tbody id="report-table-body" class="text-center font-bold text-slate-800 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RELATÓRIO: Produção por Equipe -->
+                <div id="section-rep-team" class="hidden space-y-8">
+                    <div class="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
+                        <div class="p-10 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-50/30">
+                            <div>
+                                <h2 class="text-3xl font-black text-slate-800 tracking-tight">Produção por Equipe</h2>
+                                <p class="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">Desempenho e Produtividade das Frentes de Colheita</p>
+                            </div>
+                            <div class="flex flex-col sm:flex-row gap-4 print:hidden">
+                                <div class="relative">
+                                    <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size="16"></i>
+                                    <input type="text" id="filter-rep-team" oninput="renderTeamReport()" placeholder="Filtrar Equipe..." class="pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-blue-500 transition-all w-full sm:w-64">
+                                </div>
+                                <button onclick="window.print()" class="flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
+                                    <i data-lucide="printer" size="16"></i> IMPRIMIR
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="overflow-x-auto p-4 md:p-8">
+                            <table class="w-full border-collapse border border-slate-200">
+                                <thead>
+                                    <tr class="bg-slate-100 text-slate-700 font-black text-[11px] uppercase tracking-wider text-center">
+                                        <th class="border border-slate-300 px-4 py-4 w-4/12 text-left">Equipe de Colheita</th>
+                                        <th class="border border-slate-300 px-4 py-4">Total de Cargas</th>
+                                        <th class="border border-slate-300 px-4 py-4">Produção (T)</th>
+                                        <th class="border border-slate-300 px-4 py-4">Produção (Sacos)</th>
+                                        <th class="border border-slate-300 px-4 py-4 text-blue-600">Média (Sacos/Carga)</th>
+                                        <th class="border border-slate-300 px-4 py-4 text-left">Fazendas Atendidas</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="report-team-body" class="text-center font-bold text-slate-800 text-sm"></tbody>
+                                <tfoot>
+                                    <tr class="bg-slate-50 font-black text-lg">
+                                        <td class="border border-slate-300 px-4 py-6 text-right uppercase">Total Geral das Equipes:</td>
+                                        <td id="total-team-loads" class="border border-slate-300 px-4 py-6">0</td>
+                                        <td id="total-team-t" class="border border-slate-300 px-4 py-6 text-blue-700">0,0</td>
+                                        <td id="total-team-s" class="border border-slate-300 px-4 py-6 text-blue-700">0,0</td>
+                                        <td colspan="2" class="border border-slate-300 bg-white"></td>
+                                    </tr>
+                                </tfoot>
                             </table>
                         </div>
                     </div>
@@ -781,6 +850,12 @@
         if (!db.depositaryTargets) db.depositaryTargets = [];
 
         let importPreviewData = [];
+
+        // Helper global para remover acentos
+        const removeAccents = (str) => {
+            if (!str) return '';
+            return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        };
 
         function saveToDB() { 
             localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); 
@@ -1231,6 +1306,12 @@
         }
 
         function seedData() {
+            // Se já existem áreas cadastradas, não sobrescreve (preserva alterações manuais)
+            if (db.farmAreas && db.farmAreas.length > 0) {
+                console.log("Áreas já configuradas. Pulando seed oficial.");
+                return;
+            }
+
             // LISTA OFICIAL DEFINITIVA (Total: 5247,86 Há)
             const officialList = [
                 [141, "0141-PANORAMA II", 7.45, "BONUS 8579 IPRO"], [157, "SANTA HELENA I", 517.54, "NEOGEN 680 IPRO"],
@@ -1293,12 +1374,18 @@
 
         function switchReport(id) {
             document.getElementById('section-rep-sacks').classList.toggle('hidden', id !== 'sacks');
+            document.getElementById('section-rep-team').classList.toggle('hidden', id !== 'team');
             document.getElementById('section-rep-depositary').classList.toggle('hidden', id !== 'depositary');
             
             document.getElementById('btn-rep-sacks').classList.toggle('border-blue-600', id === 'sacks');
             document.getElementById('btn-rep-sacks').classList.toggle('text-blue-600', id === 'sacks');
             document.getElementById('btn-rep-sacks').classList.toggle('border-transparent', id !== 'sacks');
             document.getElementById('btn-rep-sacks').classList.toggle('text-slate-400', id !== 'sacks');
+
+            document.getElementById('btn-rep-team').classList.toggle('border-blue-600', id === 'team');
+            document.getElementById('btn-rep-team').classList.toggle('text-blue-600', id === 'team');
+            document.getElementById('btn-rep-team').classList.toggle('border-transparent', id !== 'team');
+            document.getElementById('btn-rep-team').classList.toggle('text-slate-400', id !== 'team');
             
             document.getElementById('btn-rep-dep').classList.toggle('border-blue-600', id === 'depositary');
             document.getElementById('btn-rep-dep').classList.toggle('text-blue-600', id === 'depositary');
@@ -1311,7 +1398,17 @@
         function renderHarvest() {
             const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
             document.getElementById('total-sacks-val').innerText = (totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
-            document.getElementById('harvest-table-body').innerHTML = db.entries.sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => `
+
+            const farmFilter = removeAccents(document.getElementById('filter-harvest-farm')?.value || '').toUpperCase();
+            const varietyFilter = removeAccents(document.getElementById('filter-harvest-variety')?.value || '').toUpperCase();
+
+            const filteredEntries = db.entries.filter(e => {
+                const matchesFarm = !farmFilter || removeAccents(e.farm).toUpperCase().includes(farmFilter) || removeAccents(e.romaneio).toUpperCase().includes(farmFilter);
+                const matchesVariety = !varietyFilter || removeAccents(e.variety).toUpperCase().includes(varietyFilter) || removeAccents(e.team).toUpperCase().includes(varietyFilter);
+                return matchesFarm && matchesVariety;
+            });
+
+            document.getElementById('harvest-table-body').innerHTML = filteredEntries.sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => `
                 <tr class="hover:bg-slate-50">
                     <td class="px-6 py-4">
                         <div class="font-bold text-slate-700">${new Date(e.date).toLocaleDateString('pt-BR')}</div>
@@ -1360,7 +1457,7 @@
                 <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Produção Total</p><h4 class="text-2xl font-black">${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4></div>
                 <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Total Sacos</p><h4 class="text-2xl font-black">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</h4></div>
                 <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Produtividade Média</p><h4 class="text-2xl font-black">${avgProd.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4></div>
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Área Mapeada</p><h4 class="text-2xl font-black">${totalArea.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Há</h4></div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Área Mapeada</p><h4 class="text-2xl font-black">${totalArea.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Há</h4></div>
             `;
 
             const groups = {};
@@ -1389,7 +1486,7 @@
                     <td class="px-6 py-4 font-mono text-[10px] text-slate-400">${a.code || '---'}</td>
                     <td class="px-6 py-4 font-black uppercase">${a.farm}</td>
                     <td class="px-6 py-4 font-bold text-slate-400">${a.variety}</td>
-                    <td class="px-6 py-4 text-right font-bold text-indigo-600">${a.area.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} Há</td>
+                    <td class="px-6 py-4 text-right font-bold text-indigo-600">${a.area.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Há</td>
                     <td class="px-6 py-4 text-right"><button onclick="db.farmAreas.splice(${idx},1);saveToDB()" class="text-slate-300 hover:text-red-500"><i data-lucide="trash-2" size="16"></i></button></td>
                 </tr>
             `).join('') || '<tr><td colspan="5" class="py-12 text-center text-slate-300">Nenhuma área cadastrada</td></tr>';
@@ -1417,41 +1514,119 @@
 
         function renderReports() {
             renderSacksPerHaReport();
+            renderTeamReport();
             renderDepositaryReport();
+        }
+
+        function renderTeamReport() {
+            const body = document.getElementById('report-team-body');
+            const teamFilter = removeAccents(document.getElementById('filter-rep-team')?.value || '').toUpperCase();
+            const dataMap = {};
+
+            db.entries.forEach(e => {
+                const teamName = e.team || 'Não Informada';
+                if (!dataMap[teamName]) {
+                    dataMap[teamName] = { 
+                        name: teamName, 
+                        loads: 0, 
+                        totalKg: 0, 
+                        farms: new Set() 
+                    };
+                }
+                dataMap[teamName].loads += 1;
+                dataMap[teamName].totalKg += e.liquido;
+                dataMap[teamName].farms.add(e.farm);
+            });
+
+            const sortedTeams = Object.values(dataMap)
+                .filter(t => !teamFilter || removeAccents(t.name).toUpperCase().includes(teamFilter))
+                .sort((a, b) => b.totalKg - a.totalKg);
+
+            let totalLoads = 0;
+            let totalKg = 0;
+            let html = '';
+
+            sortedTeams.forEach(t => {
+                const totalT = t.totalKg / 1000;
+                const totalS = t.totalKg / 60;
+                const avgSacksPerLoad = totalS / t.loads;
+                
+                totalLoads += t.loads;
+                totalKg += t.totalKg;
+
+                html += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="border border-slate-200 px-4 py-4 text-left font-black uppercase">${t.name}</td>
+                        <td class="border border-slate-200 px-4 py-4">${t.loads}</td>
+                        <td class="border border-slate-200 px-4 py-4 font-black">${totalT.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>
+                        <td class="border border-slate-200 px-4 py-4 font-black">${totalS.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
+                        <td class="border border-slate-300 px-4 py-4 text-blue-600 font-black bg-blue-50/30">
+                            ${avgSacksPerLoad.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
+                        </td>
+                        <td class="border border-slate-200 px-4 py-4 text-left text-[10px] text-slate-500 font-bold uppercase">
+                            ${Array.from(t.farms).join(', ')}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            body.innerHTML = html || '<tr><td colspan="6" class="py-12 text-center text-slate-300">Nenhum dado encontrado</td></tr>';
+            
+            document.getElementById('total-team-loads').innerText = totalLoads;
+            document.getElementById('total-team-t').innerText = (totalKg/1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+            document.getElementById('total-team-s').innerText = (totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+            
+            lucide.createIcons();
         }
 
         function renderSacksPerHaReport() {
             const reportBody = document.getElementById('report-table-body');
             const reportData = {};
             
+            const farmFilter = removeAccents(document.getElementById('filter-rep-farm')?.value || '').toUpperCase();
+            const varietyFilter = removeAccents(document.getElementById('filter-rep-variety')?.value || '').toUpperCase();
+
             // Helper para normalizar nomes de fazenda (remove prefixos como 0157 e espaços)
             const normalizeFarm = (name) => {
-                const norm = name.replace(/^\d+\s*/, '').trim().toUpperCase();
-                return norm || name.trim().toUpperCase(); 
+                if (!name) return '';
+                // Remove prefixo de código: números seguidos de hífens, espaços ou pontos
+                let clean = removeAccents(name.toUpperCase()).replace(/^[\d\s\-\.]+/, '').trim();
+                return clean || removeAccents(name.trim().toUpperCase()); 
             };
 
             // Helper para extrair apenas o código numérico do início do nome (ex: 0157 -> 157)
             const extractCode = (name) => {
-                const match = name.match(/^(\d+)/);
+                if (!name) return null;
+                const match = String(name).match(/^(\d+)/);
                 return match ? parseInt(match[1]) : null;
             };
 
             // Helper para normalizar variedades (ex: NEO 680 IPRO -> 680)
             const normalizeVariety = (v) => {
                 if (!v) return '';
-                const match = v.match(/(\d{3,4})/); // Busca o número da variedade (ex: 680, 790, 7601)
-                return match ? match[1] : v.trim().toUpperCase();
+                const upper = removeAccents(v.trim().toUpperCase());
+                const match = upper.match(/(\d{3,4})/); // Busca o número da variedade (ex: 680, 790, 7601)
+                return match ? match[1] : upper;
             };
 
             // Inicializa com áreas cadastradas
             db.farmAreas.forEach(area => {
                 const farmKey = normalizeFarm(area.farm);
-                if (!reportData[farmKey]) reportData[farmKey] = { displayName: area.farm, code: area.code, varieties: {} };
+                const codeStr = String(area.code || '').trim();
+                
+                if (!reportData[farmKey]) {
+                    reportData[farmKey] = { 
+                        displayName: area.farm, 
+                        code: codeStr, 
+                        varieties: {} 
+                    };
+                }
                 
                 reportData[farmKey].varieties[area.variety] = { 
                     area: area.area, 
                     pesoKg: 0, 
-                    sacos: 0 
+                    sacos: 0,
+                    isMapped: true
                 };
             });
 
@@ -1464,38 +1639,69 @@
                 // 1. Tenta encontrar a fazenda pelo CÓDIGO (mais preciso)
                 let targetFarmKey = null;
                 if (entryFarmCode) {
-                    targetFarmKey = Object.keys(reportData).find(k => parseInt(reportData[k].code) === entryFarmCode);
+                    targetFarmKey = Object.keys(reportData).find(k => {
+                        const farmCode = extractCode(reportData[k].code) || extractCode(reportData[k].displayName);
+                        return farmCode === entryFarmCode;
+                    });
                 }
                 
                 // 2. Se não achou por código, tenta por NOME (fuzzy match)
                 if (!targetFarmKey) {
-                    targetFarmKey = Object.keys(reportData).find(k => k === entryFarmKey || k.includes(entryFarmKey) || entryFarmKey.includes(k));
+                    targetFarmKey = Object.keys(reportData).find(k => {
+                        const normK = normalizeFarm(k);
+                        const normDisplayName = normalizeFarm(reportData[k].displayName);
+                        return normK === entryFarmKey || normDisplayName === entryFarmKey || normK.includes(entryFarmKey) || entryFarmKey.includes(normK);
+                    });
                 }
                 
-                if (targetFarmKey) {
-                    const farmObj = reportData[targetFarmKey];
-                    
-                    // 3. Tenta encontrar a variedade correta dentro da fazenda
-                    let targetVariety = Object.keys(farmObj.varieties).find(v => {
-                        if (v === 'Todas') return false;
-                        const vNorm = normalizeVariety(v);
-                        return vNorm === entryVarietyNorm || v.includes(entryVarietyNorm) || entryVarietyNorm.includes(vNorm);
-                    });
-
-                    // Se não achou a variedade específica, tenta usar 'Todas'
-                    if (!targetVariety && farmObj.varieties['Todas']) {
-                        targetVariety = 'Todas';
-                    }
-
-                    if (targetVariety) {
-                        farmObj.varieties[targetVariety].pesoKg += entry.liquido;
-                        farmObj.varieties[targetVariety].sacos += (entry.liquido / 60);
+                // Se ainda não achou, cria uma entrada temporária para esta fazenda desconhecida
+                if (!targetFarmKey) {
+                    targetFarmKey = entryFarmKey;
+                    if (!reportData[targetFarmKey]) {
+                        reportData[targetFarmKey] = {
+                            displayName: entry.farm,
+                            code: entryFarmCode || '---',
+                            varieties: {},
+                            isUnknown: true
+                        };
                     }
                 }
+
+                const farmObj = reportData[targetFarmKey];
+                
+                // 3. Tenta encontrar a variedade correta dentro da fazenda
+                let targetVariety = Object.keys(farmObj.varieties).find(v => {
+                    if (v === 'Todas') return false;
+                    const vNorm = normalizeVariety(v);
+                    return vNorm === entryVarietyNorm || v.toUpperCase().includes(entryVarietyNorm) || entryVarietyNorm.includes(vNorm);
+                });
+
+                // Se não achou a variedade específica, tenta usar 'Todas' (se existir no mapeamento)
+                if (!targetVariety && farmObj.varieties['Todas']) {
+                    targetVariety = 'Todas';
+                }
+
+                // Se ainda não achou a variedade, cria uma nova entrada para esta variedade nesta fazenda
+                if (!targetVariety) {
+                    targetVariety = entry.variety;
+                    if (!farmObj.varieties[targetVariety]) {
+                        farmObj.varieties[targetVariety] = { area: 0, pesoKg: 0, sacos: 0, isMapped: false };
+                    }
+                }
+
+                farmObj.varieties[targetVariety].pesoKg += entry.liquido;
+                farmObj.varieties[targetVariety].sacos += (entry.liquido / 60);
             });
 
-            // Ordenação: 1º Quem tem produção (farmTotalKg > 0), 2º Nome alfabético
-            const sortedFarms = Object.keys(reportData).sort((a, b) => {
+            // Filtra fazendas que não têm produção E não têm área cadastrada (limpeza)
+            const finalFarms = Object.keys(reportData).filter(k => {
+                const totalKg = Object.values(reportData[k].varieties).reduce((acc, v) => acc + v.pesoKg, 0);
+                const totalArea = Object.values(reportData[k].varieties).reduce((acc, v) => acc + v.area, 0);
+                return totalKg > 0 || totalArea > 0;
+            });
+
+            // Ordenação: 1º Quem tem produção, 2º Nome alfabético
+            const sortedFarms = finalFarms.sort((a, b) => {
                 const totalA = Object.values(reportData[a].varieties).reduce((acc, v) => acc + v.pesoKg, 0);
                 const totalB = Object.values(reportData[b].varieties).reduce((acc, v) => acc + v.pesoKg, 0);
                 
@@ -1508,7 +1714,23 @@
 
             sortedFarms.forEach(farmKey => {
                 const farmObj = reportData[farmKey];
-                const varieties = Object.keys(farmObj.varieties).sort();
+                
+                // Aplica filtro de fazenda no objeto da fazenda
+                const farmMatches = !farmFilter || 
+                    removeAccents(farmObj.displayName).toUpperCase().includes(farmFilter) || 
+                    removeAccents(String(farmObj.code)).toUpperCase().includes(farmFilter);
+
+                if (!farmMatches) return;
+
+                // Só mostra variedades que têm área OU produção E respeitam o filtro de variedade
+                const varieties = Object.keys(farmObj.varieties).filter(v => {
+                    const hasData = farmObj.varieties[v].area > 0 || farmObj.varieties[v].pesoKg > 0;
+                    const matchesVariety = !varietyFilter || removeAccents(v).toUpperCase().includes(varietyFilter);
+                    return hasData && matchesVariety;
+                }).sort();
+
+                if (varieties.length === 0) return;
+
                 const farmTotalKg = varieties.reduce((acc, v) => acc + farmObj.varieties[v].pesoKg, 0);
                 
                 varieties.forEach((variety, idx) => {
@@ -1516,17 +1738,21 @@
                     const prod = data.area > 0 ? (data.sacos / data.area) : 0;
                     
                     html += `
-                        <tr class="${idx === 0 ? 'bg-slate-50/30' : ''}">
+                        <tr class="${idx === 0 ? 'bg-slate-50/30' : ''} ${farmObj.isUnknown ? 'bg-red-50/10' : ''}">
                             <td class="border border-slate-200 px-4 py-3 font-mono text-[10px] ${idx > 0 ? 'text-slate-300' : 'text-slate-400'}">
                                 ${farmObj.code || '---'}
                             </td>
                             <td class="border border-slate-200 px-4 py-3 text-left font-black uppercase ${idx > 0 ? 'text-slate-400' : ''}">
                                 ${farmObj.displayName}
+                                ${farmObj.isUnknown && idx === 0 ? '<span class="block text-[8px] text-red-500 font-bold">NÃO MAPEADA</span>' : ''}
                             </td>
-                            <td class="border border-slate-200 px-4 py-3 font-bold text-slate-600">${variety}</td>
+                            <td class="border border-slate-200 px-4 py-3 font-bold text-slate-600">
+                                ${variety}
+                                ${!data.isMapped && data.pesoKg > 0 ? '<span class="block text-[8px] text-amber-500 font-bold">VAR. NÃO MAPEADA</span>' : ''}
+                            </td>
                             <td class="border border-slate-200 px-4 py-3 text-right">${data.pesoKg > 0 ? (data.pesoKg/1000).toLocaleString('pt-BR', { minimumFractionDigits: 3 }) : '-'}</td>
                             <td class="border border-slate-200 px-4 py-3 text-right">${data.sacos > 0 ? data.sacos.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '-'}</td>
-                            <td class="border border-slate-200 px-4 py-3 text-right text-blue-600 font-black">${data.area > 0 ? data.area.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '-'}</td>
+                            <td class="border border-slate-200 px-4 py-3 text-right text-blue-600 font-black">${data.area > 0 ? data.area.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
                             <td class="border border-slate-200 px-4 py-3 text-right font-black ${prod > 0 ? 'text-green-700 bg-green-50' : ''}">
                                 ${prod > 0 ? prod.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '-'}
                             </td>
@@ -1538,7 +1764,7 @@
                 });
             });
 
-            reportBody.innerHTML = html || '<tr><td colspan="7" class="py-12 text-center text-slate-300">Nenhum dado para exibir</td></tr>';
+            reportBody.innerHTML = html || '<tr><td colspan="8" class="py-12 text-center text-slate-300">Nenhum dado para exibir</td></tr>';
         }
 
         function renderDepositaryReport() {
