@@ -4,33 +4,83 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cambuí - Colheita de Soja 2024/2025</title>
-    <!-- Tailwind CSS para estilização moderna -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons para ícones bonitos -->
+    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Tesseract.js para OCR (Reconhecimento de Texto em Imagem) -->
+    <!-- Tesseract.js para OCR -->
     <script src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+    <!-- SheetJS para leitura de Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        const firebaseConfig = { 
+            apiKey: "AIzaSyCnPmFtsYFb84alnpLi1EdgCGrgwWYubkQ", 
+            authDomain: "controle-de-soja.firebaseapp.com", 
+            projectId: "controle-de-soja", 
+            storageBucket: "controle-de-soja.firebasestorage.app", 
+            messagingSenderId: "753900416760", 
+            appId: "1:753900416760:web:322abe9d07889b34bfd50d", 
+            measurementId: "G-7RQLWR8VXL" 
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const firestore = getFirestore(app);
+
+        // Expõe funções para o escopo global (usadas pelo sistema Vanilla JS)
+        window.saveToFirebase = async (data) => {
+            try {
+                const statusEl = document.getElementById('sync-status');
+                if (statusEl) statusEl.innerText = 'Sincronizando...';
+                await setDoc(doc(firestore, "app_data", "main_db"), data);
+                if (statusEl) statusEl.innerText = 'Sincronizado';
+            } catch (e) {
+                console.error("Erro Firebase:", e);
+                if (statusEl) statusEl.innerText = 'Erro ao sincronizar';
+            }
+        };
+
+        // Escuta mudanças em tempo real
+        onSnapshot(doc(firestore, "app_data", "main_db"), (doc) => {
+            if (doc.exists()) {
+                const cloudData = doc.data();
+                // Só atualiza se houver mudança real para evitar loops
+                if (JSON.stringify(cloudData) !== localStorage.getItem('soja_app_single_file_data_v6')) {
+                    localStorage.setItem('soja_app_single_file_data_v6', JSON.stringify(cloudData));
+                    // Recarrega a UI se o usuário não estiver editando algo no momento
+                    if (window.db) {
+                        window.db = cloudData;
+                        window.renderAll();
+                    }
+                }
+            }
+        });
+    </script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
-        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); }
         .tab-active { color: #2563eb; border-bottom: 2px solid #2563eb; }
         .tab-inactive { color: #64748b; }
         .tab-inactive:hover { color: #334155; }
-        .loading-shimmer {
-            background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
-        }
-        @keyframes shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area *, #tab-reports, #tab-reports * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 100%; }
+            #tab-reports { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+            button, nav, header, #import-loader { display: none !important; }
         }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
     <div id="app" class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Header Principal -->
+        <!-- Header -->
         <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
             <div>
                 <h1 class="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -44,11 +94,12 @@
                 <div>
                     <p class="text-xs text-blue-100 font-bold uppercase tracking-widest">Total Geral Acumulado</p>
                     <p class="text-2xl font-black leading-none"><span id="total-sacks-val">0</span> <span class="text-sm font-normal">sacos</span></p>
+                    <p id="sync-status" class="text-[8px] text-blue-300 font-black uppercase mt-1 tracking-tighter">Sincronizado</p>
                 </div>
             </div>
         </header>
 
-        <!-- Navegação por Abas -->
+        <!-- Navegação -->
         <nav class="flex gap-8 mb-8 border-b border-slate-200">
             <button onclick="switchTab('dashboard')" id="btn-dashboard" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-active">
                 <i data-lucide="layout-dashboard" class="inline-block mr-2" size="18"></i>Painel
@@ -62,15 +113,15 @@
             <button onclick="switchTab('farms')" id="btn-farms" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
                 <i data-lucide="map" class="inline-block mr-2" size="18"></i>Fazendas
             </button>
+            <button onclick="switchTab('reports')" id="btn-reports" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
+                <i data-lucide="bar-chart-3" class="inline-block mr-2" size="18"></i>Relatórios
+            </button>
         </nav>
 
-        <!-- Seções de Conteúdo -->
         <main>
-            <!-- DASHBOARD SECTION -->
+            <!-- DASHBOARD -->
             <section id="tab-dashboard" class="space-y-8">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="dashboard-stats">
-                    <!-- Stats via JS -->
-                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="dashboard-stats"></div>
                 <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-8 border-b border-slate-50 flex items-center justify-between">
                         <h2 class="text-xl font-black text-slate-800 flex items-center gap-2">Performance por Variedade</h2>
@@ -85,43 +136,39 @@
                                     <th class="px-8 py-5 text-right">Total Sacos</th>
                                 </tr>
                             </thead>
-                            <tbody id="dashboard-table-body" class="divide-y divide-slate-50">
-                                <!-- Table via JS -->
-                            </tbody>
+                            <tbody id="dashboard-table-body" class="divide-y divide-slate-50"></tbody>
                         </table>
                     </div>
                 </div>
             </section>
 
-            <!-- HARVEST LOG SECTION -->
+            <!-- HARVEST -->
             <section id="tab-harvest" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div class="lg:col-span-1">
                     <div class="space-y-6 sticky top-8">
-                        <!-- Botão de Upload / OCR -->
+                        <!-- Importação Inteligente -->
                         <div class="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-[2rem] shadow-xl text-white relative overflow-hidden group">
                             <i data-lucide="sparkles" class="absolute -right-4 -top-4 text-white/10 group-hover:scale-110 transition-transform" size="120"></i>
-                            <h3 class="text-lg font-black mb-2 flex items-center gap-2">
-                                <i data-lucide="scan-text"></i>Lançamento Múltiplo
-                            </h3>
-                            <p class="text-xs text-blue-100 mb-6 font-medium leading-relaxed">Envie uma foto da sua planilha e o sistema identificará todas as linhas de colheita automaticamente.</p>
+                            <h3 class="text-lg font-black mb-2 flex items-center gap-2"><i data-lucide="file-up"></i>Importar Planilha / Foto</h3>
+                            <p class="text-xs text-blue-100 mb-6 font-medium leading-relaxed">Suporta arquivos Excel (.xlsx) ou fotos da sua planilha. O sistema mapeia todas as colunas automaticamente.</p>
                             
                             <label class="cursor-pointer bg-white text-blue-700 px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-blue-50 transition-all active:scale-95 shadow-lg shadow-blue-900/20">
-                                <i data-lucide="camera"></i>ESCANEAR PLANILHA
-                                <input type="file" id="ocr-upload" accept="image/*" class="hidden" onchange="processImage(this)">
+                                <i data-lucide="upload"></i>ESCOLHER ARQUIVO
+                                <input type="file" id="file-upload" accept="image/*, .xlsx, .xls" class="hidden" onchange="handleFileImport(this)">
                             </label>
                             
-                            <div id="ocr-loader" class="hidden mt-4 space-y-2">
+                            <div id="import-loader" class="hidden mt-4 space-y-2">
                                 <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-                                    <span>Analisando planilha...</span>
-                                    <span id="ocr-progress">0%</span>
+                                    <span id="import-status">Processando...</span>
+                                    <span id="import-progress">0%</span>
                                 </div>
                                 <div class="w-full bg-blue-900/30 h-1.5 rounded-full overflow-hidden">
-                                    <div id="ocr-bar" class="bg-white h-full transition-all duration-300" style="width: 0%"></div>
+                                    <div id="import-bar" class="bg-white h-full transition-all duration-300" style="width: 0%"></div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Formulário Manual -->
+                        <!-- Lançamento Manual -->
                         <form onsubmit="handleFormSubmit(event)" class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 space-y-6">
                             <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-4">
                                 <i data-lucide="plus-circle" class="text-blue-600"></i>Lançamento Manual
@@ -145,8 +192,8 @@
                                         <datalist id="list-varieties"></datalist>
                                     </div>
                                     <div class="space-y-1">
-                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Romaneio</label>
-                                        <input type="text" id="form-romaneio" placeholder="Nº Romaneio..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nr. Controle (Romaneio)</label>
+                                        <input type="text" id="form-romaneio" placeholder="Nº..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
                                     </div>
                                 </div>
                                 <div class="space-y-1">
@@ -161,12 +208,12 @@
                                 </div>
                                 <div class="grid grid-cols-2 gap-4">
                                     <div class="space-y-1">
-                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazém</label>
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Local Destino (Armazém)</label>
                                         <input type="text" id="form-warehouse" list="list-warehouses" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
                                         <datalist id="list-warehouses"></datalist>
                                     </div>
                                     <div class="space-y-1">
-                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ticket / Ticket</label>
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ticket</label>
                                         <input type="text" id="form-ticket" placeholder="Nº..." class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
                                     </div>
                                 </div>
@@ -200,43 +247,40 @@
                     </div>
                 </div>
 
-                <!-- Tabela de Lançamentos Extraídos (Preview OCR) ou Últimos Lançamentos -->
                 <div class="lg:col-span-2 space-y-8">
-                    <!-- PREVIEW OCR SECTION -->
-                    <div id="ocr-preview-section" class="hidden bg-amber-50 rounded-[2rem] border-2 border-amber-200 shadow-lg overflow-hidden animate-in fade-in duration-500">
+                    <!-- PREVIEW IMPORTAÇÃO -->
+                    <div id="import-preview-section" class="hidden bg-amber-50 rounded-[2rem] border-2 border-amber-200 shadow-lg overflow-hidden">
                         <div class="p-6 border-b border-amber-200 flex items-center justify-between bg-amber-100/50">
                             <div>
-                                <h3 class="font-black text-amber-900 flex items-center gap-2"><i data-lucide="eye"></i>Conferir Dados Extraídos</h3>
-                                <p class="text-xs text-amber-700 font-bold uppercase tracking-wider">Verifique antes de salvar em massa</p>
+                                <h3 class="font-black text-amber-900 flex items-center gap-2"><i data-lucide="eye"></i>Conferir Lançamentos</h3>
+                                <p class="text-xs text-amber-700 font-bold uppercase tracking-wider">Verifique os dados da planilha antes de confirmar</p>
                             </div>
                             <div class="flex gap-2">
-                                <button onclick="clearOCRPreview()" class="px-4 py-2 bg-white text-slate-600 rounded-xl text-xs font-black hover:bg-slate-100 border border-slate-200 transition-all">CANCELAR</button>
-                                <button onclick="saveBulkEntries()" class="px-6 py-2 bg-green-600 text-white rounded-xl text-xs font-black hover:bg-green-700 shadow-lg shadow-green-100 transition-all">CONFIRMAR TUDO</button>
+                                <button onclick="clearImportPreview()" class="px-4 py-2 bg-white text-slate-600 rounded-xl text-xs font-black hover:bg-slate-100 border border-slate-200">CANCELAR</button>
+                                <button onclick="saveBulkEntries()" class="px-6 py-2 bg-green-600 text-white rounded-xl text-xs font-black hover:bg-green-700 shadow-lg shadow-green-100">CONFIRMAR TUDO</button>
                             </div>
                         </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left text-sm">
-                                <thead>
-                                    <tr class="text-amber-900/50 font-bold text-[10px] uppercase tracking-widest border-b border-amber-200">
-                                        <th class="px-6 py-4">Fazenda</th>
-                                        <th class="px-6 py-4">Romaneio</th>
-                                        <th class="px-6 py-4">Equipe</th>
-                                        <th class="px-6 py-4 text-right">Bruto (kg)</th>
-                                        <th class="px-6 py-4 text-right">Líquido (kg)</th>
-                                        <th class="px-6 py-4"></th>
+                        <div class="overflow-x-auto max-h-[600px]">
+                            <table class="w-full text-left text-[11px]">
+                                <thead class="sticky top-0 bg-amber-50 border-b border-amber-200">
+                                    <tr class="text-amber-900/50 font-black uppercase tracking-widest">
+                                        <th class="px-4 py-3">Fazenda</th>
+                                        <th class="px-4 py-3">Depositário</th>
+                                        <th class="px-4 py-3">Romaneio</th>
+                                        <th class="px-4 py-3">Equipe</th>
+                                        <th class="px-4 py-3 text-right">Líquido (kg)</th>
+                                        <th class="px-4 py-3"></th>
                                     </tr>
                                 </thead>
-                                <tbody id="ocr-preview-body" class="divide-y divide-amber-100">
-                                    <!-- Preview via JS -->
-                                </tbody>
+                                <tbody id="import-preview-body" class="divide-y divide-amber-100"></tbody>
                             </table>
                         </div>
                     </div>
 
-                    <!-- ULTIMOS LANÇAMENTOS -->
+                    <!-- ÚLTIMOS LANÇAMENTOS -->
                     <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-                        <div class="p-6 border-b border-slate-50 flex items-center justify-between">
-                            <h3 class="font-black text-slate-800 flex items-center gap-2"><i data-lucide="history"></i>Últimos Lançamentos</h3>
+                        <div class="p-6 border-b border-slate-50">
+                            <h3 class="font-black text-slate-800 flex items-center gap-2"><i data-lucide="history"></i>Histórico Oficial</h3>
                         </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-sm">
@@ -246,23 +290,19 @@
                                         <th class="px-6 py-4">Origem / Equipe</th>
                                         <th class="px-6 py-4 text-right">Líquido (kg)</th>
                                         <th class="px-6 py-4 text-right">Sacos</th>
-                                        <th class="px-6 py-4"></th>
+                                        <th class="px-6 py-4">Ações</th>
                                     </tr>
                                 </thead>
-                                <tbody id="harvest-table-body" class="divide-y divide-slate-50">
-                                    <!-- Table via JS -->
-                                </tbody>
+                                <tbody id="harvest-table-body" class="divide-y divide-slate-50"></tbody>
                             </table>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- DEPOSITS SECTION -->
+            <!-- DEPOSITS -->
             <section id="tab-deposits" class="hidden space-y-8">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="deposit-summary">
-                    <!-- Summary via JS -->
-                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="deposit-summary"></div>
                 <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-8 border-b border-slate-50">
                         <h2 class="text-xl font-black text-slate-800 flex items-center gap-2"><i data-lucide="user-check" class="text-blue-600"></i>Saldos por Depositário</h2>
@@ -272,62 +312,158 @@
                             <thead>
                                 <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
                                     <th class="px-8 py-5">Depositário</th>
-                                    <th class="px-8 py-5">Armazém</th>
+                                    <th class="px-8 py-5">Local de Depósito</th>
                                     <th class="px-8 py-5 text-right">Peso (T)</th>
                                     <th class="px-8 py-5 text-right">Saldo (Sacos)</th>
                                 </tr>
                             </thead>
-                            <tbody id="deposits-table-body" class="divide-y divide-slate-50">
-                                <!-- Table via JS -->
-                            </tbody>
+                            <tbody id="deposits-table-body" class="divide-y divide-slate-50"></tbody>
                         </table>
                     </div>
                 </div>
             </section>
 
-            <!-- FARMS SECTION -->
+            <!-- FARMS -->
             <section id="tab-farms" class="hidden space-y-8">
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div class="lg:col-span-1">
                         <form onsubmit="handleFarmAreaSubmit(event)" class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 space-y-6">
-                            <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-4">
-                                <i data-lucide="map" class="text-indigo-600"></i>Configurar Área
-                            </h3>
+                            <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-4"><i data-lucide="map" class="text-indigo-600"></i>Área das Fazendas</h3>
                             <div class="space-y-4">
                                 <div class="space-y-1">
                                     <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fazenda</label>
-                                    <input type="text" id="farm-area-name" list="list-farms-config" placeholder="Escolha ou digite..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all">
+                                    <input type="text" id="farm-area-name" list="list-farms-config" placeholder="Nome..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
                                     <datalist id="list-farms-config"></datalist>
                                 </div>
                                 <div class="space-y-1">
-                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Área (Hectares - Há)</label>
-                                    <input type="number" step="0.01" id="farm-area-val" placeholder="0.00" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Variedade (Opcional)</label>
+                                    <input type="text" id="farm-area-variety" list="list-varieties-config" placeholder="Todas..." class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                                    <datalist id="list-varieties-config"></datalist>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hectares (Há)</label>
+                                    <input type="number" step="0.01" id="farm-area-val" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
                                 </div>
                             </div>
-                            <button type="submit" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100">
-                                ATUALIZAR ÁREA
-                            </button>
+                            <button type="submit" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">ATUALIZAR ÁREA</button>
                         </form>
                     </div>
                     <div class="lg:col-span-2">
                         <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-                            <div class="p-6 border-b border-slate-50">
-                                <h3 class="font-black text-slate-800 flex items-center gap-2"><i data-lucide="list"></i>Áreas Cadastradas</h3>
+                            <div class="p-6 border-b border-slate-50"><h3 class="font-black text-slate-800 flex items-center gap-2"><i data-lucide="list"></i>Áreas Cadastradas</h3></div>
+                            <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50"><th class="px-6 py-4">Fazenda</th><th class="px-6 py-4">Variedade</th><th class="px-6 py-4 text-right">Área (Há)</th><th class="px-6 py-4"></th></tr></thead><tbody id="farms-table-body" class="divide-y divide-slate-50"></tbody></table></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- REPORTS -->
+            <section id="tab-reports" class="hidden space-y-8">
+                <!-- Seletor de Relatório -->
+                <div class="flex flex-col md:flex-row gap-4 mb-8">
+                    <button onclick="switchReport('sacks')" id="btn-rep-sacks" class="flex-1 py-6 bg-white rounded-3xl shadow-sm border-2 border-blue-600 text-blue-600 font-black flex items-center justify-center gap-3 transition-all hover:bg-blue-50">
+                        <i data-lucide="bar-chart-3"></i> CONTROLE DE SACOS POR HÁ
+                    </button>
+                    <button onclick="switchReport('depositary')" id="btn-rep-dep" class="flex-1 py-6 bg-white rounded-3xl shadow-sm border-2 border-transparent text-slate-400 font-black flex items-center justify-center gap-3 transition-all hover:bg-slate-50">
+                        <i data-lucide="landmark"></i> DEPOSITÁRIO SOJA
+                    </button>
+                </div>
+
+                <!-- RELATÓRIO: Sacos por Há -->
+                <div id="section-rep-sacks" class="space-y-8">
+                    <div class="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
+                        <div class="p-10 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-50/30">
+                            <div>
+                                <h2 class="text-3xl font-black text-slate-800 tracking-tight">Controle de Sacos por Há</h2>
+                                <p class="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">Produtividade e Rendimento Safra 2024/2025</p>
                             </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left text-sm">
-                                    <thead>
-                                        <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
-                                            <th class="px-6 py-4">Fazenda</th>
-                                            <th class="px-6 py-4 text-right">Área (Há)</th>
-                                            <th class="px-6 py-4"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="farms-table-body" class="divide-y divide-slate-50">
-                                        <!-- Table via JS -->
-                                    </tbody>
-                                </table>
+                            <button onclick="window.print()" class="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
+                                <i data-lucide="printer" size="16"></i> IMPRIMIR RELATÓRIO
+                            </button>
+                        </div>
+                        
+                        <div class="overflow-x-auto p-4 md:p-8">
+                            <table class="w-full border-collapse border border-slate-200">
+                                <thead>
+                                    <tr class="bg-slate-100 text-slate-700 font-black text-[11px] uppercase tracking-wider text-center">
+                                        <th class="border border-slate-300 px-4 py-4 w-1/4">Fazenda</th>
+                                        <th class="border border-slate-300 px-4 py-4">Variedade</th>
+                                        <th class="border border-slate-300 px-4 py-4">Quantidade (T)</th>
+                                        <th class="border border-slate-300 px-4 py-4">Quantidade (S)</th>
+                                        <th class="border border-slate-300 px-4 py-4">Area Plantada</th>
+                                        <th class="border border-slate-300 px-4 py-4 text-green-700">Sacos/Há</th>
+                                        <th class="border border-slate-300 px-4 py-4">Total Faz (T)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="report-table-body" class="text-center font-bold text-slate-800 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RELATÓRIO: Depositário Soja -->
+                <div id="section-rep-depositary" class="hidden space-y-8">
+                    <!-- Configuração de Metas -->
+                    <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden p-8 print:hidden">
+                        <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 mb-6 border-b border-slate-50 pb-4">
+                            <i data-lucide="settings" class="text-blue-600"></i>Configurar Metas de Depositário
+                        </h3>
+                        <form onsubmit="handleDepositTargetSubmit(event)" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depositário</label>
+                                <input type="text" id="target-owner" list="list-owners-target" placeholder="Nome..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                                <datalist id="list-owners-target"></datalist>
                             </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazém</label>
+                                <input type="text" id="target-warehouse" list="list-warehouses-target" placeholder="Local..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                                <datalist id="list-warehouses-target"></datalist>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total a Pagar (Sacos)</label>
+                                <input type="number" step="0.01" id="target-sacks" placeholder="Qtd..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                            </div>
+                            <div class="flex items-end">
+                                <button type="submit" class="w-full py-3.5 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">DEFINIR META</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
+                        <div class="p-10 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-50/30">
+                            <div>
+                                <h2 class="text-3xl font-black text-slate-800 tracking-tight">Depositário Soja</h2>
+                                <p class="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">Controle de Saldos e Entregas por Depositário</p>
+                            </div>
+                            <button onclick="window.print()" class="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
+                                <i data-lucide="printer" size="16"></i> IMPRIMIR RELATÓRIO
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto p-4 md:p-8">
+                            <table class="w-full border-collapse border border-slate-200">
+                                <thead>
+                                    <tr class="bg-slate-100 text-slate-700 font-black text-[11px] uppercase tracking-wider text-center">
+                                        <th class="border border-slate-300 px-4 py-4">Proprietário</th>
+                                        <th class="border border-slate-300 px-4 py-4">Total a pagar (Sacos)</th>
+                                        <th class="border border-slate-300 px-4 py-4">Total a pagar (T)</th>
+                                        <th class="border border-slate-300 px-4 py-4">Armazém</th>
+                                        <th class="border border-slate-300 px-4 py-4">Total Depositado (T)</th>
+                                        <th class="border border-slate-300 px-4 py-4">Total Depositado (S)</th>
+                                        <th class="border border-slate-300 px-4 py-4 text-red-600">Total A ser Depositado (T)</th>
+                                        <th class="border border-slate-300 px-4 py-4 text-red-600">Total A ser Depositado (s)</th>
+                                        <th class="border border-slate-300 px-2 py-2 print:hidden"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="report-deposit-body" class="text-center font-bold text-slate-800 text-sm"></tbody>
+                                <tfoot>
+                                    <tr class="bg-slate-50 font-black text-lg">
+                                        <td colspan="4" class="border border-slate-300 px-4 py-6 text-right uppercase">Totais Gerais:</td>
+                                        <td id="total-dep-t" class="border border-slate-300 px-4 py-6 text-blue-700">0,0</td>
+                                        <td id="total-dep-s" class="border border-slate-300 px-4 py-6 text-blue-700">0,0</td>
+                                        <td colspan="3" class="border border-slate-300 bg-white"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -335,444 +471,910 @@
         </main>
     </div>
 
+    <!-- MODAL DE EDIÇÃO -->
+    <div id="edit-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div class="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h3 class="text-2xl font-black text-slate-800 flex items-center gap-3">
+                    <i data-lucide="edit-3" class="text-blue-600"></i>Editar Registro
+                </h3>
+                <button onclick="closeEditModal()" class="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                    <i data-lucide="x" class="text-slate-500"></i>
+                </button>
+            </div>
+            <form onsubmit="handleEditSubmit(event)" id="edit-form" class="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+                <input type="hidden" id="edit-id">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</label>
+                        <input type="date" id="edit-date" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fazenda</label>
+                        <input type="text" id="edit-farm" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Variedade</label>
+                        <input type="text" id="edit-variety" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Romaneio</label>
+                        <input type="text" id="edit-romaneio" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                    </div>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depositário</label>
+                    <input type="text" id="edit-owner" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Equipe</label>
+                    <input type="text" id="edit-team" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazém</label>
+                        <input type="text" id="edit-warehouse" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ticket</label>
+                        <input type="text" id="edit-ticket" class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bruto</label>
+                        <input type="number" id="edit-bruto" oninput="calcEditLiquido()" required class="w-full bg-white border-0 rounded-xl px-3 py-2 text-sm font-black">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tara</label>
+                        <input type="number" id="edit-tara" oninput="calcEditLiquido()" required class="w-full bg-white border-0 rounded-xl px-3 py-2 text-sm font-black">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-red-400 uppercase tracking-widest">Desc.</label>
+                        <input type="number" id="edit-desc" oninput="calcEditLiquido()" required class="w-full bg-white border-0 rounded-xl px-3 py-2 text-sm font-black text-red-600">
+                    </div>
+                </div>
+                <div class="bg-blue-600 p-6 rounded-3xl text-white">
+                    <label class="block text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">Novo Peso Líquido</label>
+                    <div class="text-3xl font-black"><span id="edit-liquido">0</span> kg</div>
+                </div>
+                <div class="flex gap-4">
+                    <button type="button" onclick="closeEditModal()" class="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all">CANCELAR</button>
+                    <button type="submit" class="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition-all shadow-xl shadow-blue-100">SALVAR ALTERAÇÕES</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ÁREA DE IMPRESSÃO (ESCONDIDA) -->
+    <div id="print-area" class="p-8 hidden">
+        <div class="border-4 border-slate-900 p-8 space-y-8">
+            <div class="text-center border-b-2 border-slate-200 pb-6">
+                <h1 class="text-4xl font-black uppercase tracking-tighter">Comprovante de Colheita</h1>
+                <p class="text-xl font-bold text-slate-600 mt-2">Cambuí - Safra 2024/2025</p>
+            </div>
+            <div class="grid grid-cols-2 gap-8 text-xl">
+                <div>
+                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Fazenda</p>
+                    <p id="print-farm" class="font-black"></p>
+                </div>
+                <div>
+                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Data</p>
+                    <p id="print-date" class="font-black"></p>
+                </div>
+                <div>
+                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Romaneio</p>
+                    <p id="print-romaneio" class="font-black"></p>
+                </div>
+                <div>
+                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Ticket</p>
+                    <p id="print-ticket" class="font-black"></p>
+                </div>
+                <div class="col-span-2">
+                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Depositário</p>
+                    <p id="print-owner" class="font-black"></p>
+                </div>
+                <div>
+                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Equipe</p>
+                    <p id="print-team" class="font-black"></p>
+                </div>
+                <div>
+                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Variedade</p>
+                    <p id="print-variety" class="font-black"></p>
+                </div>
+            </div>
+            <div class="bg-slate-50 p-8 rounded-3xl space-y-4 border-2 border-slate-200">
+                <div class="flex justify-between items-center text-2xl">
+                    <span class="font-bold">Peso Bruto:</span>
+                    <span id="print-bruto" class="font-black"></span>
+                </div>
+                <div class="flex justify-between items-center text-2xl">
+                    <span class="font-bold">Peso Tara:</span>
+                    <span id="print-tara" class="font-black"></span>
+                </div>
+                <div class="flex justify-between items-center text-2xl text-red-600">
+                    <span class="font-bold">Descontos:</span>
+                    <span id="print-desc" class="font-black"></span>
+                </div>
+                <div class="border-t-4 border-slate-900 pt-4 flex justify-between items-center text-4xl">
+                    <span class="font-black uppercase">Peso Líquido:</span>
+                    <span id="print-liquido" class="font-black text-blue-700"></span>
+                </div>
+                <div class="text-right text-xl font-bold text-slate-400">
+                    <span id="print-sacks"></span> sacos
+                </div>
+            </div>
+            <div class="pt-12 grid grid-cols-2 gap-12 text-center">
+                <div class="border-t-2 border-slate-400 pt-2 text-xs font-bold uppercase tracking-widest">Assinatura Motorista</div>
+                <div class="border-t-2 border-slate-400 pt-2 text-xs font-bold uppercase tracking-widest">Assinatura Responsável</div>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // SERVIÇO DE DADOS (LOCALSTORAGE)
-        const STORAGE_KEY = 'soja_app_single_file_data_v5';
+        // DB
+        const STORAGE_KEY = 'soja_app_single_file_data_v6';
         let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
-            entries: [],
-            farms: [],
-            varieties: [],
-            warehouses: [],
-            owners: [],
-            teams: [],
-            farmAreas: {}
+            entries: [], farms: [], varieties: [], warehouses: [], owners: [], teams: [], farmAreas: [], depositaryTargets: []
         };
+        
+        // Migração de dados antigos
+        if (!Array.isArray(db.farmAreas)) {
+            const oldAreas = db.farmAreas;
+            db.farmAreas = Object.entries(oldAreas).map(([farm, area]) => ({ farm, variety: 'Todas', area }));
+        }
+        if (!db.depositaryTargets) db.depositaryTargets = [];
 
-        let ocrPreviewData = []; // Armazena dados extraídos temporariamente
+        let importPreviewData = [];
 
-        function saveToDB() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-            renderAll();
+        function saveToDB() { 
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); 
+            renderAll(); 
+            // Salva no Firebase se a função estiver disponível (carregada via módulo)
+            if (window.saveToFirebase) {
+                window.saveToFirebase(db);
+            }
         }
 
-        // FUNÇÕES DE OCR (RECONHECIMENTO DE IMAGEM MULTI-LINHA)
-        async function processImage(input) {
+        // IMPORTAÇÃO (EXCEL OU IMAGEM)
+        async function handleFileImport(input) {
             if (!input.files || !input.files[0]) return;
-            
-            const loader = document.getElementById('ocr-loader');
-            const progressText = document.getElementById('ocr-progress');
-            const progressBar = document.getElementById('ocr-bar');
+            const file = input.files[0];
+            const loader = document.getElementById('import-loader');
+            const statusText = document.getElementById('import-status');
+            const progressBar = document.getElementById('import-bar');
             
             loader.classList.remove('hidden');
-            progressText.innerText = '0%';
             progressBar.style.width = '0%';
 
-            try {
-                const result = await Tesseract.recognize(
-                    input.files[0],
-                    'por',
-                    { logger: m => {
-                        if (m.status === 'recognizing text') {
-                            const p = Math.round(m.progress * 100);
-                            progressText.innerText = p + '%';
-                            progressBar.style.width = p + '%';
+            if (file.name.match(/\.(xlsx|xls)$/)) {
+                statusText.innerText = 'Lendo Excel...';
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(firstSheet);
+                    processImportedJSON(json);
+                    loader.classList.add('hidden');
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                statusText.innerText = 'Lendo Imagem (IA)...';
+                try {
+                    const result = await Tesseract.recognize(file, 'por', { 
+                        logger: m => {
+                            if (m.status === 'recognizing text') {
+                                const p = Math.round(m.progress * 100);
+                                document.getElementById('import-progress').innerText = p + '%';
+                                progressBar.style.width = p + '%';
+                            }
                         }
-                    }}
-                );
-
-                parseOCRMultiLine(result.data.text);
-            } catch (err) {
-                console.error(err);
-                alert('Erro ao ler a planilha. Tente uma foto mais nítida.');
-            } finally {
-                loader.classList.add('hidden');
-                input.value = '';
+                    });
+                    parseOCR(result.data.text);
+                } catch (err) { alert('Erro na leitura da imagem.'); }
+                finally { loader.classList.add('hidden'); }
             }
+            input.value = '';
         }
 
-        function parseOCRMultiLine(text) {
-            console.log("Texto extraído total:", text);
-            const lines = text.split('\n').filter(l => l.trim().length > 10); // Filtra linhas vazias ou muito curtas
-            ocrPreviewData = [];
+        function processImportedJSON(rows) {
+            importPreviewData = rows.map(row => {
+                // Tenta encontrar colunas mesmo com variações de nome ou espaços extras
+                const findCol = (keys) => {
+                    const found = Object.keys(row).find(k => keys.some(key => k.trim().toUpperCase() === key.toUpperCase()));
+                    return found ? row[found] : null;
+                };
+
+                const bruto = cleanNum(findCol(['Peso Bruto', 'BRUTO', 'P. BRUTO']));
+                const tara = cleanNum(findCol(['Peso Tara', 'TARA', 'P. TARA']));
+                const desc = cleanNum(findCol(['Peso Descontado', 'DESCONTO', 'DESC', 'P. DESC']));
+                const liquido = cleanNum(findCol(['Peso Liq.(Kg)', 'LIQUIDO', 'P. LIQ', 'PESO LIQUIDO']));
+                
+                return {
+                    id: Date.now() + Math.random(),
+                    date: parseExcelDate(findCol(['Data/Hora 1', 'DATA', 'DATA HORA'])) || new Date().toISOString().split('T')[0],
+                    farm: findCol(['Fazenda', 'FAZENDA', 'PROPRIEDADE']) || '---',
+                    warehouse: findCol(['Local Destino', 'LOCAL DESTINO', 'ARMAZÉM', 'DESTINO']) || '---',
+                    owner: findCol(['Depositário', 'DEPOSITARIO', 'PROPRIETÁRIO']) || '---',
+                    ticket: String(findCol(['Ticket', 'TICKET', 'Nº TICKET']) || '---'),
+                    romaneio: String(findCol(['Nr. Controle Produção', 'ROMANEIO', 'CONTROLE', 'Nº CONTROLE']) || '---'),
+                    variety: findCol(['Variedade', 'VARIEDADE', 'CULTIVAR']) || '---',
+                    team: findCol(['Equipe', 'EQUIPE', 'COLHEITA']) || '---',
+                    obs: findCol(['Observação', 'OBSERVAÇÃO', 'OBS']) || 'Importado via Excel',
+                    bruto, tara, desc, liquido
+                };
+            }).filter(e => e.bruto > 0);
+            renderImportPreview();
+        }
+
+        function parseOCR(text) {
+            console.log("OCR RAW:", text);
+            const lines = text.split('\n').filter(l => l.trim().length > 15);
+            importPreviewData = [];
 
             lines.forEach(line => {
-                // Tenta encontrar padrões de peso e nomes conhecidos em cada linha
-                const numbers = line.match(/\d+[\.\,]\d+/g) || [];
-                const cleanNumbers = numbers.map(n => parseFloat(n.replace('.', '').replace(',', '.')));
-                const largeNumbers = cleanNumbers.filter(n => n > 100);
+                const upperLine = line.toUpperCase();
+                
+                // Regex para capturar números formatados
+                const nums = line.match(/\d{1,3}(\.?\d{3})*(,\d+)?/g) || [];
+                const cleanNums = nums.map(n => cleanNum(n));
+                
+                // Filtra números que podem ser pesos (geralmente acima de 50)
+                const largeNums = cleanNums.filter(n => n > 50);
 
-                // Só considera linha de dados se tiver pelo menos 3 números grandes (Bruto, Tara, Liquido)
-                if (largeNumbers.length >= 3) {
-                    const extracted = {
+                if (largeNums.length >= 2) {
+                    // Tenta extrair Ticket (7 dígitos, geralmente começa com 107)
+                    const ticketMatch = line.match(/\b107\d{4}\b/) || line.match(/\b\d{7}\b/);
+                    const ticket = ticketMatch ? ticketMatch[0] : '---';
+
+                    // Tenta extrair Romaneio (5-6 dígitos, geralmente começa com 16, as vezes com barra)
+                    // Removemos o número do ticket da busca do romaneio para não confundir
+                    const lineWithoutTicket = line.replace(ticket !== '---' ? ticket : 'NOTHING_TO_REPLACE', '');
+                    const romaneioMatch = lineWithoutTicket.match(/\b16\d{3,4}\b/) || lineWithoutTicket.match(/\b\d{5,6}\b/);
+                    const romaneio = romaneioMatch ? romaneioMatch[0] : '---';
+
+                    const row = {
                         id: Date.now() + Math.random(),
-                        date: new Date().toISOString().split('T')[0], // Padrão hoje
-                        farm: 'Detectando...',
-                        variety: 'Detectando...',
-                        owner: 'Detectando...',
-                        warehouse: 'Detectando...',
-                        team: 'Detectando...',
-                        romaneio: '---',
-                        bruto: largeNumbers[0],
-                        tara: largeNumbers[1],
-                        desc: largeNumbers.length > 3 ? largeNumbers[2] : 0,
-                        liquido: largeNumbers[largeNumbers.length - 1]
+                        date: extractField(line, /(\d{2}\/\d{2}\/\d{4})/) || new Date().toISOString().split('T')[0],
+                        farm: detect(line, ['SANTA HELEN', 'LAVA ZOI', 'POUSO DA', 'TRES IRMAS', 'CALIFORNIA', 'SAO JOAO', 'CAMBUI', 'SANTA MARIA', 'NOVA CALIFORNIA', 'PANORAMA', 'MAGNÓLIA', 'BOA ESP', 'SANTA LUZIA']),
+                        warehouse: detect(line, ['AGROMEN', 'COMIGO', 'ARMAZENS', 'COAMO', 'CARGILL', 'BUNGE', 'FLORESTA', 'SANTA HELENA']),
+                        owner: detect(line, ['SUSANA', 'GUTEMBERG', 'CAMBUI', 'JOAO', 'MARIA']),
+                        romaneio: romaneio,
+                        variety: detect(line, ['NEO 680', 'IPRO', 'SOJA', 'M7739', 'M6410', 'MONSOY', 'NEOGEN']),
+                        team: detect(line, ['FERREIRA', 'ANTONIO AIRES', 'EQUIPE', 'COLHEITA', '0164-C']),
+                        ticket: ticket,
+                        obs: 'Detectado via Foto',
+                        bruto: 0, tara: 0, desc: 0, liquido: 0
                     };
 
-                    // Busca nomes conhecidos na linha
-                    if (line.includes('SANTA HELEN')) extracted.farm = '0157 SANTA HELEN';
-                    else if (line.includes('LAVA ZOI')) extracted.farm = '0162 LAVA ZOI';
-                    else if (line.includes('POUSO DA')) extracted.farm = '0182 POUSO DA BO';
-                    else if (line.includes('TRES IRMAS')) extracted.farm = '1095 TRES IRMAS';
-                    else if (line.includes('CALIFORNIA')) extracted.farm = '1538 NOVA CALIFORNIA';
+                    // Lógica robusta para pesos (Bruto, Tara, Desc, Liq)
+                    // Geralmente vêm nessa ordem na tabela: Bruto > Tara > Desc < Liq
+                    if (largeNums.length >= 4) {
+                        row.bruto = largeNums[0];
+                        row.tara = largeNums[1];
+                        row.desc = largeNums[2];
+                        row.liquido = largeNums[3];
+                        
+                        // Validação matemática simples para garantir que a ordem está certa
+                        // Se Bruto - Tara - Desc != Liq, tentamos reordenar
+                        if (Math.abs(row.bruto - row.tara - row.desc - row.liquido) > 10) {
+                            // Tenta identificar o líquido como o maior número restante após Bruto e Tara
+                            const sorted = [...largeNums].sort((a,b) => b-a);
+                            row.bruto = sorted[0];
+                            // A tara é geralmente o segundo maior ou próximo de 15k-40k
+                            row.liquido = sorted[1];
+                            row.tara = sorted[2];
+                            row.desc = row.bruto - row.tara - row.liquido;
+                        }
+                    } else if (largeNums.length === 3) {
+                        row.bruto = largeNums[0];
+                        row.tara = largeNums[1];
+                        row.liquido = largeNums[2];
+                        row.desc = row.bruto - row.tara - row.liquido;
+                    } else {
+                        row.bruto = largeNums[0];
+                        row.tara = largeNums[1];
+                        row.liquido = row.bruto - row.tara;
+                    }
 
-                    if (line.includes('NEO 680')) extracted.variety = 'NEO 680 IPRO';
-                    if (line.includes('SUSANA')) extracted.owner = 'SUSANA R. DE M';
-                    if (line.includes('AGROMEN')) extracted.warehouse = 'AGROMEN ARMAZENS';
-                    else if (line.includes('COMIGO')) extracted.warehouse = 'COMIGO';
-
-                    // Tenta achar o romaneio (número de 5 ou 6 dígitos antes da data)
-                    const romMatch = line.match(/\d{5,6}/);
-                    if (romMatch) extracted.romaneio = romMatch[0];
-
-                    ocrPreviewData.push(extracted);
+                    if (row.bruto > row.tara) {
+                        importPreviewData.push(row);
+                    }
                 }
             });
+            renderImportPreview();
+        }
 
-            if (ocrPreviewData.length > 0) {
-                renderOCRPreview();
-            } else {
-                alert('Não foi possível identificar linhas de dados na imagem. Verifique a qualidade da foto.');
+        function extractField(text, regex) {
+            const match = text.match(regex);
+            return match ? match[1].trim() : null;
+        }
+
+        function detect(text, keys) {
+            const upper = text.toUpperCase();
+            for (let k of keys) { if (upper.includes(k)) return k; }
+            return '---';
+        }
+
+        function cleanNum(val) {
+            if (typeof val === 'number') return val;
+            if (!val) return 0;
+            // Trata formatos brasileiros (1.234,56) e americanos (1,234.56)
+            let s = String(val).trim();
+            if (s.includes(',') && s.includes('.')) {
+                if (s.indexOf('.') < s.indexOf(',')) s = s.replace(/\./g, '').replace(',', '.');
+                else s = s.replace(/,/g, '');
+            } else if (s.includes(',')) {
+                s = s.replace(',', '.');
             }
+            return parseFloat(s) || 0;
         }
 
-        function renderOCRPreview() {
-            const section = document.getElementById('ocr-preview-section');
-            const tbody = document.getElementById('ocr-preview-body');
-            section.classList.remove('hidden');
-
-            tbody.innerHTML = ocrPreviewData.map((e, idx) => `
-                <tr class="hover:bg-amber-100/50 transition-colors">
-                    <td class="px-6 py-4">
-                        <input type="text" value="${e.farm}" onchange="updateOCRItem(${idx}, 'farm', this.value)" class="bg-transparent border-0 border-b border-amber-300 w-full text-xs font-bold focus:ring-0">
-                    </td>
-                    <td class="px-6 py-4">
-                        <input type="text" value="${e.romaneio}" onchange="updateOCRItem(${idx}, 'romaneio', this.value)" class="bg-transparent border-0 border-b border-amber-300 w-full text-xs font-bold focus:ring-0">
-                    </td>
-                    <td class="px-6 py-4">
-                        <input type="text" value="${e.team}" onchange="updateOCRItem(${idx}, 'team', this.value)" class="bg-transparent border-0 border-b border-amber-300 w-full text-xs font-bold focus:ring-0">
-                    </td>
-                    <td class="px-6 py-4 text-right font-bold text-slate-600">${e.bruto.toLocaleString('pt-BR')}</td>
-                    <td class="px-6 py-4 text-right font-black text-slate-900">${e.liquido.toLocaleString('pt-BR')}</td>
-                    <td class="px-6 py-4 text-right">
-                        <button onclick="removeOCRItem(${idx})" class="text-amber-400 hover:text-red-500"><i data-lucide="x-circle" size="18"></i></button>
-                    </td>
-                </tr>
-            `).join('');
-            lucide.createIcons();
+        function parseExcelDate(val) {
+            if (!val) return null;
+            if (typeof val === 'number') return new Date((val - 25569) * 86400 * 1000).toISOString().split('T')[0];
+            const parts = String(val).split(' ')[0].split(/[\/-]/);
+            if (parts.length === 3) {
+                if (parts[0].length === 4) return `${parts[0]}-${parts[1]}-${parts[2]}`;
+                return `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
+            return null;
         }
 
-        function updateOCRItem(idx, field, val) {
-            ocrPreviewData[idx][field] = val;
+        function renderImportPreview() {
+            const section = document.getElementById('import-preview-section');
+            const tbody = document.getElementById('import-preview-body');
+            if (importPreviewData.length > 0) {
+                section.classList.remove('hidden');
+                tbody.innerHTML = importPreviewData.map((e, idx) => `
+                    <tr class="hover:bg-amber-100/50 text-[10px]">
+                        <td class="px-2 py-3">
+                            <input type="text" value="${e.farm}" onchange="importPreviewData[${idx}].farm=this.value" class="bg-transparent w-full font-bold border-b border-amber-200 focus:border-amber-500 outline-none" title="Fazenda">
+                            <input type="text" value="${e.variety}" onchange="importPreviewData[${idx}].variety=this.value" class="bg-transparent w-full text-[8px] text-amber-600 mt-1 uppercase border-b border-transparent hover:border-amber-200 outline-none" title="Variedade">
+                        </td>
+                        <td class="px-2 py-3">
+                            <input type="text" value="${e.owner}" onchange="importPreviewData[${idx}].owner=this.value" class="bg-transparent w-full border-b border-amber-200 focus:border-amber-500 outline-none" title="Depositário">
+                            <input type="text" value="${e.warehouse}" onchange="importPreviewData[${idx}].warehouse=this.value" class="bg-transparent w-full text-[8px] text-amber-600 mt-1 uppercase border-b border-transparent hover:border-amber-200 outline-none" title="Armazém">
+                        </td>
+                        <td class="px-2 py-3">
+                            <input type="text" value="${e.romaneio}" onchange="importPreviewData[${idx}].romaneio=this.value" class="bg-transparent w-full font-mono border-b border-amber-200 focus:border-amber-500 outline-none" title="Romaneio">
+                            <div class="flex items-center gap-1 mt-1">
+                                <span class="text-[8px] text-amber-500">Tkt:</span>
+                                <input type="text" value="${e.ticket}" onchange="importPreviewData[${idx}].ticket=this.value" class="bg-transparent text-[8px] text-amber-600 border-b border-transparent hover:border-amber-200 outline-none" title="Ticket">
+                            </div>
+                        </td>
+                        <td class="px-2 py-3">
+                            <input type="text" value="${e.team}" onchange="importPreviewData[${idx}].team=this.value" class="bg-transparent w-full border-b border-amber-200 focus:border-amber-500 outline-none" title="Equipe">
+                            <input type="text" value="${e.obs}" onchange="importPreviewData[${idx}].obs=this.value" class="bg-transparent w-full text-[8px] text-amber-600 mt-1 border-b border-transparent hover:border-amber-200 outline-none" title="Observação">
+                        </td>
+                        <td class="px-2 py-3 text-right">
+                            <div class="font-black text-amber-900">${e.liquido.toLocaleString('pt-BR')}</div>
+                            <div class="text-[8px] text-amber-500">B:${e.bruto.toLocaleString('pt-BR')} T:${e.tara.toLocaleString('pt-BR')}</div>
+                        </td>
+                        <td class="px-2 py-3 text-right">
+                            <button onclick="importPreviewData.splice(${idx},1);renderImportPreview()" class="text-red-400 hover:text-red-600 transition-colors">
+                                <i data-lucide="trash-2" size="14"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+                lucide.createIcons();
+            } else { section.classList.add('hidden'); }
         }
 
-        function removeOCRItem(idx) {
-            ocrPreviewData.splice(idx, 1);
-            if (ocrPreviewData.length === 0) clearOCRPreview();
-            else renderOCRPreview();
-        }
-
-        function clearOCRPreview() {
-            document.getElementById('ocr-preview-section').classList.add('hidden');
-            ocrPreviewData = [];
-        }
+        function clearImportPreview() { importPreviewData = []; document.getElementById('import-preview-section').classList.add('hidden'); }
 
         function saveBulkEntries() {
-            if (confirm(`Deseja salvar estes ${ocrPreviewData.length} lançamentos?`)) {
-                ocrPreviewData.forEach(e => {
-                    const entry = {
-                        ...e,
-                        id: Date.now() + Math.random(),
-                        obs: 'Lançamento via OCR'
-                    };
-                    db.entries.push(entry);
-                    
-                    // Adiciona nomes às coleções se forem novos
-                    if (e.farm !== 'Detectando...' && !db.farms.includes(e.farm)) db.farms.push(e.farm);
-                    if (e.variety !== 'Detectando...' && !db.varieties.includes(e.variety)) db.varieties.push(e.variety);
-                    if (e.owner !== 'Detectando...' && !db.owners.includes(e.owner)) db.owners.push(e.owner);
-                    if (e.warehouse !== 'Detectando...' && !db.warehouses.includes(e.warehouse)) db.warehouses.push(e.warehouse);
-                    if (e.team !== 'Detectando...' && !db.teams.includes(e.team)) db.teams.push(e.team);
+            if (confirm(`Salvar ${importPreviewData.length} registros?`)) {
+                importPreviewData.forEach(e => {
+                    db.entries.push(e);
+                    if (e.farm !== '---' && !db.farms.includes(e.farm)) db.farms.push(e.farm);
+                    if (e.variety !== '---' && !db.varieties.includes(e.variety)) db.varieties.push(e.variety);
+                    if (e.owner !== '---' && !db.owners.includes(e.owner)) db.owners.push(e.owner);
+                    if (e.warehouse !== '---' && !db.warehouses.includes(e.warehouse)) db.warehouses.push(e.warehouse);
+                    if (e.team !== '---' && !db.teams.includes(e.team)) db.teams.push(e.team);
                 });
-                saveToDB();
-                clearOCRPreview();
-                alert('Todos os registros foram salvos com sucesso!');
+                saveToDB(); clearImportPreview(); alert('Sucesso!');
             }
         }
 
-        // FUNÇÕES DE NAVEGAÇÃO
-        function switchTab(tabId) {
-            ['dashboard', 'harvest', 'deposits', 'farms'].forEach(id => {
-                const tab = document.getElementById(`tab-${id}`);
-                const btn = document.getElementById(`btn-${id}`);
-                if (tab) tab.classList.toggle('hidden', id !== tabId);
-                if (btn) {
-                    btn.classList.toggle('tab-active', id === tabId);
-                    btn.classList.toggle('tab-inactive', id !== tabId);
-                }
+        // NAVIGATION & UI
+        function switchTab(id) {
+            ['dashboard', 'harvest', 'deposits', 'farms', 'reports'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== id);
+                document.getElementById(`btn-${t}`).classList.toggle('tab-active', t === id);
+                document.getElementById(`btn-${t}`).classList.toggle('tab-inactive', t !== id);
             });
             renderAll();
         }
 
-        // LÓGICA DE FORMULÁRIO MANUAL
         function calcLiquido() {
-            const bruto = parseFloat(document.getElementById('form-bruto').value) || 0;
-            const tara = parseFloat(document.getElementById('form-tara').value) || 0;
-            const desc = parseFloat(document.getElementById('form-desc').value) || 0;
-            const liquido = bruto - tara - desc;
-            document.getElementById('form-liquido').innerText = liquido.toLocaleString('pt-BR');
+            const b = parseFloat(document.getElementById('form-bruto').value) || 0;
+            const t = parseFloat(document.getElementById('form-tara').value) || 0;
+            const d = parseFloat(document.getElementById('form-desc').value) || 0;
+            document.getElementById('form-liquido').innerText = (b - t - d).toLocaleString('pt-BR');
         }
 
         function handleFormSubmit(e) {
             e.preventDefault();
-            const farmName = document.getElementById('form-farm').value.trim();
-            const varietyName = document.getElementById('form-variety').value.trim();
-            const ownerName = document.getElementById('form-owner').value.trim();
-            const warehouseName = document.getElementById('form-warehouse').value.trim();
-            const teamName = document.getElementById('form-team').value.trim();
-            const romaneio = document.getElementById('form-romaneio').value.trim();
-            const obs = document.getElementById('form-obs').value.trim();
-            const bruto = parseFloat(document.getElementById('form-bruto').value);
-            const tara = parseFloat(document.getElementById('form-tara').value);
-            const desc = parseFloat(document.getElementById('form-desc').value) || 0;
-            const liquido = bruto - tara - desc;
-
             const entry = {
                 id: Date.now(),
                 date: document.getElementById('form-date').value,
-                farm: farmName,
-                variety: varietyName,
-                owner: ownerName,
-                warehouse: warehouseName,
-                team: teamName,
-                romaneio: romaneio,
-                obs: obs,
-                ticket: document.getElementById('form-ticket').value,
-                bruto, tara, desc, liquido
+                farm: document.getElementById('form-farm').value.trim(),
+                variety: document.getElementById('form-variety').value.trim(),
+                owner: document.getElementById('form-owner').value.trim(),
+                warehouse: document.getElementById('form-warehouse').value.trim(),
+                team: document.getElementById('form-team').value.trim(),
+                romaneio: document.getElementById('form-romaneio').value.trim(),
+                obs: document.getElementById('form-obs').value.trim(),
+                ticket: document.getElementById('form-ticket').value.trim(),
+                bruto: parseFloat(document.getElementById('form-bruto').value),
+                tara: parseFloat(document.getElementById('form-tara').value),
+                desc: parseFloat(document.getElementById('form-desc').value) || 0,
+                liquido: parseFloat(document.getElementById('form-bruto').value) - parseFloat(document.getElementById('form-tara').value) - (parseFloat(document.getElementById('form-desc').value) || 0)
             };
-
             db.entries.push(entry);
-            if (!db.farms.includes(farmName)) db.farms.push(farmName);
-            if (!db.varieties.includes(varietyName)) db.varieties.push(varietyName);
-            if (!db.owners.includes(ownerName)) db.owners.push(ownerName);
-            if (!db.warehouses.includes(warehouseName)) db.warehouses.push(warehouseName);
-            if (!db.teams.includes(teamName)) db.teams.push(teamName);
+            ['farms', 'varieties', 'owners', 'warehouses', 'teams'].forEach(k => {
+                const val = entry[k.slice(0, -1 === 'ie' ? -3 : -1)]; // simplificação de chave
+                if (val && !db[k].includes(val)) db[k].push(val);
+            });
+            // Correção manual das coleções (simplificada acima mas garantida aqui)
+            if (!db.farms.includes(entry.farm)) db.farms.push(entry.farm);
+            if (!db.varieties.includes(entry.variety)) db.varieties.push(entry.variety);
+            if (!db.owners.includes(entry.owner)) db.owners.push(entry.owner);
+            if (!db.warehouses.includes(entry.warehouse)) db.warehouses.push(entry.warehouse);
+            if (!db.teams.includes(entry.team)) db.teams.push(entry.team);
 
-            saveToDB();
-            e.target.reset();
-            document.getElementById('form-date').value = new Date().toISOString().split('T')[0];
-            calcLiquido();
-            alert('Registro salvo com sucesso!');
+            saveToDB(); e.target.reset(); document.getElementById('form-date').value = new Date().toISOString().split('T')[0]; calcLiquido(); alert('Salvo!');
+        }
+
+        // EDIT & PRINT FUNCTIONS
+        function openEditModal(id) {
+            const entry = db.entries.find(e => e.id === id);
+            if (!entry) return;
+
+            document.getElementById('edit-id').value = entry.id;
+            document.getElementById('edit-date').value = entry.date;
+            document.getElementById('edit-farm').value = entry.farm;
+            document.getElementById('edit-variety').value = entry.variety;
+            document.getElementById('edit-romaneio').value = entry.romaneio;
+            document.getElementById('edit-owner').value = entry.owner;
+            document.getElementById('edit-team').value = entry.team;
+            document.getElementById('edit-warehouse').value = entry.warehouse;
+            document.getElementById('edit-ticket').value = entry.ticket || '';
+            document.getElementById('edit-bruto').value = entry.bruto;
+            document.getElementById('edit-tara').value = entry.tara;
+            document.getElementById('edit-desc').value = entry.desc || 0;
+            
+            calcEditLiquido();
+            document.getElementById('edit-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.add('hidden');
+        }
+
+        function calcEditLiquido() {
+            const b = parseFloat(document.getElementById('edit-bruto').value) || 0;
+            const t = parseFloat(document.getElementById('edit-tara').value) || 0;
+            const d = parseFloat(document.getElementById('edit-desc').value) || 0;
+            document.getElementById('edit-liquido').innerText = (b - t - d).toLocaleString('pt-BR');
+        }
+
+        function handleEditSubmit(e) {
+            e.preventDefault();
+            const id = parseFloat(document.getElementById('edit-id').value);
+            const idx = db.entries.findIndex(entry => entry.id === id);
+            
+            if (idx !== -1) {
+                const b = parseFloat(document.getElementById('edit-bruto').value);
+                const t = parseFloat(document.getElementById('edit-tara').value);
+                const d = parseFloat(document.getElementById('edit-desc').value) || 0;
+
+                db.entries[idx] = {
+                    ...db.entries[idx],
+                    date: document.getElementById('edit-date').value,
+                    farm: document.getElementById('edit-farm').value.trim(),
+                    variety: document.getElementById('edit-variety').value.trim(),
+                    romaneio: document.getElementById('edit-romaneio').value.trim(),
+                    owner: document.getElementById('edit-owner').value.trim(),
+                    team: document.getElementById('edit-team').value.trim(),
+                    warehouse: document.getElementById('edit-warehouse').value.trim(),
+                    ticket: document.getElementById('edit-ticket').value.trim(),
+                    bruto: b,
+                    tara: t,
+                    desc: d,
+                    liquido: b - t - d
+                };
+                saveToDB();
+                closeEditModal();
+                alert('Registro atualizado com sucesso!');
+            }
+        }
+
+        function printEntry(id) {
+            const entry = db.entries.find(e => e.id === id);
+            if (!entry) return;
+
+            document.getElementById('print-farm').innerText = entry.farm;
+            document.getElementById('print-date').innerText = new Date(entry.date).toLocaleDateString('pt-BR');
+            document.getElementById('print-romaneio').innerText = entry.romaneio;
+            document.getElementById('print-ticket').innerText = entry.ticket || '---';
+            document.getElementById('print-owner').innerText = entry.owner;
+            document.getElementById('print-team').innerText = entry.team;
+            document.getElementById('print-variety').innerText = entry.variety;
+            document.getElementById('print-bruto').innerText = entry.bruto.toLocaleString('pt-BR') + ' kg';
+            document.getElementById('print-tara').innerText = entry.tara.toLocaleString('pt-BR') + ' kg';
+            document.getElementById('print-desc').innerText = (entry.desc || 0).toLocaleString('pt-BR') + ' kg';
+            document.getElementById('print-liquido').innerText = entry.liquido.toLocaleString('pt-BR') + ' kg';
+            document.getElementById('print-sacks').innerText = (entry.liquido / 60).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+
+            window.print();
         }
 
         function handleFarmAreaSubmit(e) {
             e.preventDefault();
-            const farmName = document.getElementById('farm-area-name').value.trim();
-            const areaVal = parseFloat(document.getElementById('farm-area-val').value);
-
-            if (farmName && !isNaN(areaVal)) {
-                db.farmAreas[farmName] = areaVal;
-                if (!db.farms.includes(farmName)) db.farms.push(farmName);
-                saveToDB();
-                e.target.reset();
-                alert('Área da fazenda atualizada!');
+            const n = document.getElementById('farm-area-name').value.trim();
+            const v_name = document.getElementById('farm-area-variety').value.trim() || 'Todas';
+            const area = parseFloat(document.getElementById('farm-area-val').value);
+            
+            if (n && !isNaN(area)) {
+                const existingIdx = db.farmAreas.findIndex(a => a.farm === n && a.variety === v_name);
+                if (existingIdx !== -1) {
+                    db.farmAreas[existingIdx].area = area;
+                } else {
+                    db.farmAreas.push({ farm: n, variety: v_name, area });
+                }
+                if (!db.farms.includes(n)) db.farms.push(n);
+                saveToDB(); e.target.reset();
             }
         }
 
-        function deleteEntry(id) {
-            if (confirm('Deseja excluir este registro?')) {
-                db.entries = db.entries.filter(e => e.id !== id);
+        function handleDepositTargetSubmit(e) {
+            e.preventDefault();
+            const owner = document.getElementById('target-owner').value.trim();
+            const warehouse = document.getElementById('target-warehouse').value.trim();
+            const sacks = parseFloat(document.getElementById('target-sacks').value);
+
+            if (owner && warehouse && !isNaN(sacks)) {
+                const existingIdx = db.depositaryTargets.findIndex(t => t.owner === owner && t.warehouse === warehouse);
+                if (existingIdx !== -1) {
+                    db.depositaryTargets[existingIdx].sacks = sacks;
+                } else {
+                    db.depositaryTargets.push({ owner, warehouse, sacks });
+                }
+                saveToDB(); e.target.reset();
+            }
+        }
+
+        function seedData() {
+            const farmsToSeed = [
+                ["PANORAMA I", 28.51, "MONSOY 7601"], ["PANORAMA I", 215.77, "NEOGEN 790"],
+                ["SANTA HELENA I", 152.33, "NEOGEN 680"], ["NOVA CALIFÓRNIA", 36.00, "NEOGEN 680"],
+                ["NOVA CALIFÓRNIA", 35.62, "NEOGEN 750"], ["SANTA HELENA II", 26.20, "NEOGEN 680"],
+                ["LAVA ZOI", 53.01, "NEOGEN 680"], ["MAGNÓLIA", 71.12, "NEOGEN 790"],
+                ["POUSO DA BOIADA", 14.15, "NEOGEN 680"], ["BOA ESP. HILÁRIO", 77.32, "NEOGEN 790"],
+                ["SANTA LUZIA", 157.85, "NEOGEN 680"], ["SANTA LUZIA", 230.50, "NEOGEN 680"],
+                ["SANTA LUZIA", 9.63, "NEOGEN 790"], ["SÃO JOSE (ARRENDADA)", 117.67, "TORMENTA"],
+                ["SÃO JOSE (ARRENDADA)", 121.59, "NEOGEN 790"], ["SÃO JOSE (ARRENDADA)", 25.09, "MONSOY 7601"],
+                ["LEMBRANÇA", 6.08, "NEOGEN 750"], ["SÃO JOSÉ PRÓPRIA", 14.38, "NEOGEN 700"],
+                ["SÃO JOSÉ PRÓPRIA", 58.96, "TORMENTA"], ["SÃO JOSÉ PRÓPRIA", 210.86, "NEOGEN 790"],
+                ["SÃO JOSÉ PRÓPRIA", 87.44, "MONSOY 7601"], ["CAMPO BELO", 150.05, "NEOGEN 790"],
+                ["ITAJUBÁ", 147.40, "TORMENTA"], ["ALTA VENEZA", 39.87, "TORMENTA"],
+                ["ALTA VENEZA", 30.22, "NEOGEN 750"], ["PRIMAVERA", 135.54, "TORMENTA"],
+                ["NACIONAL", 128.71, "NEOGEN 680"], ["NACIONAL", 400.87, "NEOGEN 790"],
+                ["NACIONAL", 56.20, "TORMENTA"], ["SÃO MATHEUS", 91.23, "NEOGEN 790"],
+                ["FORTALEZA OUROANA", 135.94, "TORMENTA"], ["FORTALEZA TONHÃO A", 73.00, "TORMENTA"],
+                ["FORTALEZA TONHÃO A", 27.74, "NEOGEN 790"], ["FOTALEZA TONHÃO D", 26.45, "NEOGEN 680"],
+                ["INVERNADA PRÓPRIA", 57.29, "NEOGEN 680"], ["INVERNADA", 156.50, "NEOGEN 680"],
+                ["INVERNADA", 281.14, "NEOGEN 680"], ["TRÊS IRMÃS", 85.38, "NEOGEN 680"],
+                ["NOVA CALIFÓRNIA III", 6.38, "NEOGEN 680"], ["FORTALEZA TONHÃO E", 30.29, "NEOGEN 680"],
+                ["NOVO HORIZONTE", 51.72, "NEOGEN 680"], ["QUINO", 154.53, "NEOGEN 680"],
+                ["JOÃO JOSÉ", 26.00, "NEOGEN 700"], ["CABELEIRA MARLI", 259.41, "NEOGEN 750"],
+                ["CACHOEIRA CARNEIRO", 43.60, "NEOGEN 700"], ["MARIA LETICIA", 129.60, "NEOGEN 700"],
+                ["MARIA LETICIA", 29.11, "TORMENTA"], ["INDIANA", 30.92, "NEOGEN 700"],
+                ["VANDERY", 95.74, "NEOGEN 790"], ["LA SILLA", 18.00, "NEOGEN 790"],
+                ["NOVA VENEZA", 43.72, "NEOGEN 790"], ["SÃO CARLOS", 32.43, "NEOGEN 790"],
+                ["SANTA TEREZINHA II", 5.40, "NEOGEN 790"], ["SANTA TEREZINHA", 83.02, "NEOGEN 790"],
+                ["BELA VISTA DIVISA", 58.27, "NEOGEN 790"], ["CABELEIRA INVERNADA", 7.00, "NEOGEN 680"],
+                ["SANTA CAROLINA", 0, "---"], ["SÃO TOMAZ DANIELA", 56.14, "TORMENTA"]
+            ];
+
+            let changed = false;
+            farmsToSeed.forEach(([name, area, variety]) => {
+                if (!db.farms.includes(name)) {
+                    db.farms.push(name);
+                    changed = true;
+                }
+                const existing = db.farmAreas.find(a => a.farm === name && a.variety === variety);
+                if (!existing) {
+                    db.farmAreas.push({ farm: name, variety: variety || 'Todas', area: area });
+                    changed = true;
+                }
+            });
+
+            const varieties = ["MONSOY 7601", "NEOGEN 790", "NEOGEN 680", "NEOGEN 750", "TORMENTA", "NEOGEN 700"];
+            varieties.forEach(v => {
+                if (!db.varieties.includes(v)) {
+                    db.varieties.push(v);
+                    changed = true;
+                }
+            });
+
+            if (changed) {
                 saveToDB();
             }
         }
 
-        function deleteFarmArea(farmName) {
-            if (confirm(`Excluir área da fazenda ${farmName}?`)) {
-                delete db.farmAreas[farmName];
-                saveToDB();
-            }
+        // RENDERS
+        function renderAll() { 
+            renderHarvest(); 
+            renderDashboard(); 
+            renderDeposits(); 
+            renderFarms(); 
+            renderReports(); 
+            renderDatalists(); 
+            lucide.createIcons(); 
         }
 
-        // RENDERIZAÇÃO
-        function renderAll() {
-            renderHarvest();
-            renderDashboard();
-            renderDeposits();
-            renderFarms();
-            renderDatalists();
-            lucide.createIcons();
-        }
-
-        function renderDatalists() {
-            const farmsHTML = db.farms.map(f => `<option value="${f}">`).join('');
-            document.getElementById('list-farms').innerHTML = farmsHTML;
-            document.getElementById('list-farms-config').innerHTML = farmsHTML;
-            document.getElementById('list-varieties').innerHTML = db.varieties.map(v => `<option value="${v}">`).join('');
-            document.getElementById('list-owners').innerHTML = db.owners.map(o => `<option value="${o}">`).join('');
-            document.getElementById('list-warehouses').innerHTML = db.warehouses.map(w => `<option value="${w}">`).join('');
-            document.getElementById('list-teams').innerHTML = db.teams.map(t => `<option value="${t}">`).join('');
+        function switchReport(id) {
+            document.getElementById('section-rep-sacks').classList.toggle('hidden', id !== 'sacks');
+            document.getElementById('section-rep-depositary').classList.toggle('hidden', id !== 'depositary');
+            
+            document.getElementById('btn-rep-sacks').classList.toggle('border-blue-600', id === 'sacks');
+            document.getElementById('btn-rep-sacks').classList.toggle('text-blue-600', id === 'sacks');
+            document.getElementById('btn-rep-sacks').classList.toggle('border-transparent', id !== 'sacks');
+            document.getElementById('btn-rep-sacks').classList.toggle('text-slate-400', id !== 'sacks');
+            
+            document.getElementById('btn-rep-dep').classList.toggle('border-blue-600', id === 'depositary');
+            document.getElementById('btn-rep-dep').classList.toggle('text-blue-600', id === 'depositary');
+            document.getElementById('btn-rep-dep').classList.toggle('border-transparent', id !== 'depositary');
+            document.getElementById('btn-rep-dep').classList.toggle('text-slate-400', id !== 'depositary');
+            
+            renderAll();
         }
 
         function renderHarvest() {
-            const tbody = document.getElementById('harvest-table-body');
-            const totalSacks = db.entries.reduce((acc, curr) => acc + (curr.liquido / 60), 0);
-            document.getElementById('total-sacks-val').innerText = totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
-
-            tbody.innerHTML = db.entries.sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => `
-                <tr class="hover:bg-slate-50 transition-all group">
+            const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
+            document.getElementById('total-sacks-val').innerText = (totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+            document.getElementById('harvest-table-body').innerHTML = db.entries.sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => `
+                <tr class="hover:bg-slate-50">
                     <td class="px-6 py-4">
                         <div class="font-bold text-slate-700">${new Date(e.date).toLocaleDateString('pt-BR')}</div>
-                        <div class="text-[10px] text-blue-500 font-black uppercase">Rom: ${e.romaneio}</div>
+                        <div class="text-[10px] text-blue-600 font-black">ROM: ${e.romaneio}</div>
+                        ${e.ticket && e.ticket !== '---' ? `<div class="text-[9px] text-slate-400">Tkt: ${e.ticket}</div>` : ''}
                     </td>
                     <td class="px-6 py-4">
-                        <div class="font-black text-slate-800">${e.farm}</div>
-                        <div class="text-[10px] text-slate-400 font-bold uppercase">${e.variety} • ${e.team || 'S/ Equipe'}</div>
+                        <div class="font-black text-slate-800 uppercase">${e.farm}</div>
+                        <div class="text-[10px] text-slate-500 font-bold uppercase">${e.variety} • ${e.team}</div>
+                        <div class="text-[9px] text-indigo-500 font-medium">${e.warehouse} • ${e.owner}</div>
+                        ${e.obs && e.obs !== '---' ? `<div class="text-[9px] text-slate-400 italic mt-1 border-l-2 border-slate-200 pl-2">Obs: ${e.obs}</div>` : ''}
                     </td>
-                    <td class="px-6 py-4 text-right font-black text-slate-900">${e.liquido.toLocaleString('pt-BR')}</td>
-                    <td class="px-6 py-4 text-right">
-                        <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-black">${(e.liquido / 60).toFixed(1)}</span>
+                    <td class="px-6 py-4 text-right font-black text-slate-700">
+                        ${e.liquido.toLocaleString('pt-BR')}
+                        <div class="text-[9px] text-slate-400 font-normal">B:${e.bruto.toLocaleString('pt-BR')} T:${e.tara.toLocaleString('pt-BR')}</div>
                     </td>
                     <td class="px-6 py-4 text-right">
-                        <button onclick="deleteEntry(${e.id})" class="text-slate-300 hover:text-red-500 transition-colors">
-                            <i data-lucide="trash-2" size="16"></i>
-                        </button>
+                        <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-black text-xs">
+                            ${(e.liquido/60).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} sc
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <div class="flex justify-end gap-2">
+                            <button onclick="printEntry(${e.id})" class="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Imprimir">
+                                <i data-lucide="printer" size="16"></i>
+                            </button>
+                            <button onclick="openEditModal(${e.id})" class="p-2 text-slate-400 hover:text-amber-600 transition-colors" title="Editar">
+                                <i data-lucide="edit-3" size="16"></i>
+                            </button>
+                            <button onclick="if(confirm('Excluir?')){db.entries=db.entries.filter(x=>x.id!==${e.id});saveToDB()}" class="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Excluir">
+                                <i data-lucide="trash-2" size="16"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `).join('') || '<tr><td colspan="5" class="py-12 text-center text-slate-300">Nenhum registro encontrado</td></tr>';
         }
 
         function renderDashboard() {
-            const stats = document.getElementById('dashboard-stats');
             const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
             const totalSacks = totalKg / 60;
-            const totalTons = totalKg / 1000;
-            
-            let totalArea = 0;
-            const farmsInHarvest = [...new Set(db.entries.map(e => e.farm))];
-            farmsInHarvest.forEach(f => {
-                totalArea += (db.farmAreas[f] || 0);
-            });
-            
+            const totalArea = db.farmAreas.reduce((acc, curr) => acc + curr.area, 0);
             const avgProd = totalArea > 0 ? totalSacks / totalArea : 0;
 
-            if (stats) {
-                stats.innerHTML = `
-                    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4"><i data-lucide="trending-up"></i></div>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produção Total</p>
-                        <h4 class="text-2xl font-black text-slate-800">${totalTons.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4>
-                        <p class="text-xs font-bold text-slate-400">${totalKg.toLocaleString('pt-BR')} kg</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                        <div class="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center mb-4"><i data-lucide="package"></i></div>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Sacos</p>
-                        <h4 class="text-2xl font-black text-slate-800">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</h4>
-                        <p class="text-xs font-bold text-slate-400">Sacos 60kg</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                        <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4"><i data-lucide="target"></i></div>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produtividade Média</p>
-                        <h4 class="text-2xl font-black text-slate-800">${avgProd.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4>
-                        <p class="text-xs font-bold text-slate-400">Sacos / Há</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4"><i data-lucide="map"></i></div>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Área Mapeada</p>
-                        <h4 class="text-2xl font-black text-slate-800">${totalArea.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4>
-                        <p class="text-xs font-bold text-slate-400">Hectares (Há)</p>
-                    </div>
-                `;
-            }
+            document.getElementById('dashboard-stats').innerHTML = `
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Produção Total</p><h4 class="text-2xl font-black">${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4></div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Total Sacos</p><h4 class="text-2xl font-black">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</h4></div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Produtividade Média</p><h4 class="text-2xl font-black">${avgProd.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4></div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Área Mapeada</p><h4 class="text-2xl font-black">${totalArea.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Há</h4></div>
+            `;
 
-            const tableBody = document.getElementById('dashboard-table-body');
             const groups = {};
-            db.entries.forEach(e => {
-                const key = `${e.farm}-${e.variety}`;
-                if (!groups[key]) groups[key] = { farm: e.farm, variety: e.variety, kg: 0 };
-                groups[key].kg += e.liquido;
-            });
-
-            if (tableBody) {
-                tableBody.innerHTML = Object.values(groups).map(g => `
-                    <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="px-8 py-6 font-black text-slate-800">${g.farm}</td>
-                        <td class="px-8 py-6"><span class="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold text-slate-600">${g.variety}</span></td>
-                        <td class="px-8 py-6 text-right font-bold text-slate-600">${(g.kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
-                        <td class="px-8 py-6 text-right font-black text-slate-900">${(g.kg / 60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
-                    </tr>
-                `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhum dado</td></tr>';
-            }
+            db.entries.forEach(e => { const k = `${e.farm}-${e.variety}`; groups[k] = (groups[k] || 0) + e.liquido; });
+            document.getElementById('dashboard-table-body').innerHTML = Object.entries(groups).map(([k, v]) => `
+                <tr class="hover:bg-slate-50"><td class="px-8 py-6 font-black">${k.split('-')[0]}</td><td class="px-8 py-6"><span class="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold">${k.split('-')[1]}</span></td><td class="px-8 py-6 text-right font-bold">${(v/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td><td class="px-8 py-6 text-right font-black">${(v/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td></tr>
+            `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Vazio</td></tr>';
         }
 
         function renderDeposits() {
-            const summary = document.getElementById('deposit-summary');
             const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
-            const totalSacks = totalKg / 60;
-
-            if (summary) {
-                summary.innerHTML = `
-                    <div class="bg-slate-900 p-8 rounded-[2rem] text-white shadow-2xl shadow-slate-200 md:col-span-2">
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Geral em Depósito</p>
-                        <h4 class="text-4xl font-black mt-2">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} <span class="text-lg font-normal text-slate-500">sacos</span></h4>
-                        <div class="mt-4 flex items-center gap-2 text-blue-400 text-sm font-bold">
-                            <i data-lucide="arrow-right-left" size="16"></i> Equivalente a ${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Toneladas
-                        </div>
-                    </div>
-                    <div class="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-center">
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contas Ativas</p>
-                        <h4 class="text-3xl font-black text-slate-800 mt-1">${db.owners.length}</h4>
-                        <p class="text-xs font-bold text-slate-400">Depositários</p>
-                    </div>
-                `;
-            }
-
-            const tableBody = document.getElementById('deposits-table-body');
+            document.getElementById('deposit-summary').innerHTML = `
+                <div class="bg-slate-900 p-8 rounded-[2rem] text-white shadow-2xl md:col-span-2"><p class="text-[10px] font-black text-slate-400 uppercase">Total Geral Depositado</p><h4 class="text-4xl font-black">${(totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} sacos</h4></div>
+                <div class="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-center"><p class="text-[10px] font-black text-slate-400 uppercase">Depositários</p><h4 class="text-3xl font-black">${db.owners.length}</h4></div>
+            `;
             const groups = {};
-            db.entries.forEach(e => {
-                const key = `${e.owner}-${e.warehouse}`;
-                if (!groups[key]) groups[key] = { owner: e.owner, warehouse: e.warehouse, kg: 0 };
-                groups[key].kg += e.liquido;
-            });
-
-            if (tableBody) {
-                tableBody.innerHTML = Object.values(groups).map(g => `
-                    <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="px-8 py-6 font-black text-slate-800 uppercase">${g.owner}</td>
-                        <td class="px-8 py-6 font-bold text-slate-500 flex items-center gap-2"><i data-lucide="warehouse" size="16" class="text-blue-500"></i> ${g.warehouse}</td>
-                        <td class="px-8 py-6 text-right font-bold text-slate-400">${(g.kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
-                        <td class="px-8 py-6 text-right font-black text-slate-900">${(g.kg / 60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
-                    </tr>
-                `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhum depósito</td></tr>';
-            }
+            db.entries.forEach(e => { const k = `${e.owner}-${e.warehouse}`; groups[k] = (groups[k] || 0) + e.liquido; });
+            document.getElementById('deposits-table-body').innerHTML = Object.entries(groups).map(([k, v]) => `
+                <tr class="hover:bg-slate-50"><td class="px-8 py-6 font-black uppercase">${k.split('-')[0]}</td><td class="px-8 py-6 font-bold text-slate-500">${k.split('-')[1]}</td><td class="px-8 py-6 text-right font-bold text-slate-400">${(v/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td><td class="px-8 py-6 text-right font-black">${(v/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td></tr>
+            `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Vazio</td></tr>';
         }
 
         function renderFarms() {
-            const tableBody = document.getElementById('farms-table-body');
-            if (tableBody) {
-                tableBody.innerHTML = Object.entries(db.farmAreas).map(([name, area]) => `
-                    <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="px-6 py-4 font-black text-slate-800">${name}</td>
-                        <td class="px-6 py-4 text-right font-bold text-indigo-600">${area.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} Há</td>
-                        <td class="px-6 py-4 text-right">
-                            <button onclick="deleteFarmArea('${name}')" class="text-slate-300 hover:text-red-500 transition-colors">
-                                <i data-lucide="trash-2" size="16"></i>
+            document.getElementById('farms-table-body').innerHTML = db.farmAreas.map((a, idx) => `
+                <tr class="hover:bg-slate-50">
+                    <td class="px-6 py-4 font-black uppercase">${a.farm}</td>
+                    <td class="px-6 py-4 font-bold text-slate-400">${a.variety}</td>
+                    <td class="px-6 py-4 text-right font-bold text-indigo-600">${a.area.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} Há</td>
+                    <td class="px-6 py-4 text-right"><button onclick="db.farmAreas.splice(${idx},1);saveToDB()" class="text-slate-300 hover:text-red-500"><i data-lucide="trash-2" size="16"></i></button></td>
+                </tr>
+            `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhuma área cadastrada</td></tr>';
+        }
+
+        function renderDatalists() {
+            const farmlist = db.farms.map(f => `<option value="${f}">`).join('');
+            document.getElementById('list-farms').innerHTML = farmlist;
+            document.getElementById('list-farms-config').innerHTML = farmlist;
+            
+            const varietyList = db.varieties.map(v => `<option value="${v}">`).join('');
+            document.getElementById('list-varieties').innerHTML = varietyList;
+            document.getElementById('list-varieties-config').innerHTML = varietyList;
+            
+            const ownerList = db.owners.map(o => `<option value="${o}">`).join('');
+            document.getElementById('list-owners').innerHTML = ownerList;
+            document.getElementById('list-owners-target').innerHTML = ownerList;
+            
+            const warehouseList = db.warehouses.map(w => `<option value="${w}">`).join('');
+            document.getElementById('list-warehouses').innerHTML = warehouseList;
+            document.getElementById('list-warehouses-target').innerHTML = warehouseList;
+            
+            document.getElementById('list-teams').innerHTML = db.teams.map(t => `<option value="${t}">`).join('');
+        }
+
+        function renderReports() {
+            renderSacksPerHaReport();
+            renderDepositaryReport();
+        }
+
+        function renderSacksPerHaReport() {
+            const reportBody = document.getElementById('report-table-body');
+            const reportData = {};
+            
+            // Helper para normalizar nomes de fazenda (remove prefixos como 0157 e espaços)
+            const normalizeFarm = (name) => {
+                return name.replace(/^\d+\s*/, '').trim().toUpperCase();
+            };
+
+            // Inicializa com áreas cadastradas
+            db.farmAreas.forEach(area => {
+                const farmKey = normalizeFarm(area.farm);
+                if (!reportData[farmKey]) reportData[farmKey] = { displayName: area.farm, varieties: {} };
+                
+                reportData[farmKey].varieties[area.variety] = { 
+                    area: area.area, 
+                    pesoKg: 0, 
+                    sacos: 0 
+                };
+            });
+
+            // Soma colheitas reais usando busca flexível
+            db.entries.forEach(entry => {
+                const entryFarmKey = normalizeFarm(entry.farm);
+                
+                // Busca se a fazenda da colheita existe no mapeamento de áreas
+                let targetFarmKey = Object.keys(reportData).find(k => k === entryFarmKey || k.includes(entryFarmKey) || entryFarmKey.includes(k));
+                
+                if (!targetFarmKey) {
+                    targetFarmKey = entryFarmKey;
+                    reportData[targetFarmKey] = { displayName: entry.farm, varieties: {} };
+                }
+
+                if (!reportData[targetFarmKey].varieties[entry.variety]) {
+                    reportData[targetFarmKey].varieties[entry.variety] = { area: 0, pesoKg: 0, sacos: 0 };
+                }
+                
+                reportData[targetFarmKey].varieties[entry.variety].pesoKg += entry.liquido;
+                reportData[targetFarmKey].varieties[entry.variety].sacos += (entry.liquido / 60);
+            });
+
+            const sortedFarms = Object.keys(reportData).sort();
+            let html = '';
+
+            sortedFarms.forEach(farmKey => {
+                const farmObj = reportData[farmKey];
+                const varieties = Object.keys(farmObj.varieties).sort();
+                const farmTotalKg = varieties.reduce((acc, v) => acc + farmObj.varieties[v].pesoKg, 0);
+                
+                varieties.forEach((variety, idx) => {
+                    const data = farmObj.varieties[variety];
+                    const prod = data.area > 0 ? (data.sacos / data.area) : 0;
+                    
+                    html += `
+                        <tr class="${idx === 0 ? 'bg-slate-50/30' : ''}">
+                            <td class="border border-slate-200 px-4 py-3 text-left font-black uppercase ${idx > 0 ? 'text-slate-300' : ''}">
+                                ${idx === 0 ? farmObj.displayName : ''}
+                            </td>
+                            <td class="border border-slate-200 px-4 py-3 font-bold text-slate-600">${variety}</td>
+                            <td class="border border-slate-200 px-4 py-3 text-right">${data.pesoKg > 0 ? (data.pesoKg/1000).toLocaleString('pt-BR', { minimumFractionDigits: 3 }) : '-'}</td>
+                            <td class="border border-slate-200 px-4 py-3 text-right">${data.sacos > 0 ? data.sacos.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '-'}</td>
+                            <td class="border border-slate-200 px-4 py-3 text-right text-blue-600 font-black">${data.area > 0 ? data.area.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '-'}</td>
+                            <td class="border border-slate-200 px-4 py-3 text-right font-black ${prod > 0 ? 'text-green-700 bg-green-50' : ''}">
+                                ${prod > 0 ? prod.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '-'}
+                            </td>
+                            <td class="border border-slate-200 px-4 py-3 text-right font-black ${idx === 0 ? 'bg-slate-100/50' : ''}">
+                                ${idx === 0 ? (farmTotalKg/1000).toLocaleString('pt-BR', { minimumFractionDigits: 3 }) : ''}
+                            </td>
+                        </tr>
+                    `;
+                });
+            });
+
+            reportBody.innerHTML = html || '<tr><td colspan="7" class="py-12 text-center text-slate-300">Nenhum dado para exibir</td></tr>';
+        }
+
+        function renderDepositaryReport() {
+            const body = document.getElementById('report-deposit-body');
+            const dataMap = {};
+            db.entries.forEach(e => {
+                const k = `${e.owner}-${e.warehouse}`;
+                if (!dataMap[k]) dataMap[k] = { owner: e.owner, warehouse: e.warehouse, targetSacks: 0, depositedKg: 0 };
+                dataMap[k].depositedKg += e.liquido;
+            });
+            db.depositaryTargets.forEach(t => {
+                const k = `${t.owner}-${t.warehouse}`;
+                if (!dataMap[k]) dataMap[k] = { owner: t.owner, warehouse: t.warehouse, targetSacks: 0, depositedKg: 0 };
+                dataMap[k].targetSacks = t.sacks;
+            });
+            let totalDepKg = 0;
+            let totalDepSacks = 0;
+            let html = '';
+            Object.values(dataMap).sort((a,b) => a.owner.localeCompare(b.owner)).forEach(d => {
+                const targetT = (d.targetSacks * 60) / 1000;
+                const depT = d.depositedKg / 1000;
+                const depS = d.depositedKg / 60;
+                const diffT = depT - targetT;
+                const diffS = depS - d.targetSacks;
+                totalDepKg += d.depositedKg;
+                totalDepSacks += depS;
+                html += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="border border-slate-200 px-4 py-4 text-left font-black uppercase">${d.owner}</td>
+                        <td class="border border-slate-200 px-4 py-4">${d.targetSacks > 0 ? d.targetSacks.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '-'}</td>
+                        <td class="border border-slate-200 px-4 py-4">${targetT > 0 ? targetT.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '-'}</td>
+                        <td class="border border-slate-200 px-4 py-4 text-slate-500 font-bold">${d.warehouse}</td>
+                        <td class="border border-slate-200 px-4 py-4 font-black">${depT.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                        <td class="border border-slate-200 px-4 py-4 font-black">${depS.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
+                        <td class="border border-slate-200 px-4 py-4 ${diffT < 0 ? 'text-red-600' : 'text-green-600'}">${diffT.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                        <td class="border border-slate-200 px-4 py-4 ${diffS < 0 ? 'text-red-600' : 'text-green-600'}">${diffS.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
+                        <td class="border border-slate-200 px-2 py-2 print:hidden">
+                            <button onclick="db.depositaryTargets=db.depositaryTargets.filter(t=>!(t.owner==='${d.owner}' && t.warehouse==='${d.warehouse}'));saveToDB()" class="text-slate-300 hover:text-red-500 transition-colors">
+                                <i data-lucide="trash-2" size="14"></i>
                             </button>
                         </td>
                     </tr>
-                `).join('') || '<tr><td colspan="3" class="py-12 text-center text-slate-300">Nenhuma área configurada</td></tr>';
-            }
+                `;
+            });
+            body.innerHTML = html || '<tr><td colspan="9" class="py-12 text-center text-slate-300">Nenhum dado para exibir</td></tr>';
+            document.getElementById('total-dep-t').innerText = (totalDepKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+            document.getElementById('total-dep-s').innerText = totalDepSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+            lucide.createIcons();
         }
 
-        // Inicialização
+        // INIT
+        seedData();
         document.getElementById('form-date').value = new Date().toISOString().split('T')[0];
         renderAll();
     </script>
