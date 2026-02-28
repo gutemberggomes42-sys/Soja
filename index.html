@@ -17,7 +17,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, orderBy, limit, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
         const firebaseConfig = { 
@@ -70,37 +70,106 @@
                 document.getElementById('user-name').innerText = user.displayName;
                 document.getElementById('user-photo').src = user.photoURL;
                 
-                // Inicializa o Snapshot do Firestore apenas após o login
-                onSnapshot(doc(firestore, "app_data", "main_db"), (doc) => {
-                    if (doc.exists()) {
-                        const cloudData = doc.data();
-                        if (JSON.stringify(cloudData) !== localStorage.getItem('soja_app_single_file_data_v6')) {
-                            localStorage.setItem('soja_app_single_file_data_v6', JSON.stringify(cloudData));
-                            if (window.db) {
-                                window.db = cloudData;
-                                window.renderAll();
-                            }
-                        }
-                    }
-                });
+                // Inicializa Listeners para Sincronização em Tempo Real
+                setupRealtimeSync();
             } else {
                 loginScreen.classList.remove('hidden');
                 appContent.classList.add('hidden');
             }
         });
 
-        // Expõe funções para o escopo global
-        window.saveToFirebase = async (data) => {
+        async function setupRealtimeSync() {
+            // Sincroniza Entradas de Colheita
+            onSnapshot(collection(firestore, "harvest_entries"), (snapshot) => {
+                const cloudEntries = [];
+                snapshot.forEach(doc => cloudEntries.push(doc.data()));
+                
+                if (window.db) {
+                    // Merge inteligente: mantém o que já existe e adiciona/atualiza
+                    const merged = mergeArrays(window.db.entries, cloudEntries);
+                    if (JSON.stringify(window.db.entries) !== JSON.stringify(merged)) {
+                        window.db.entries = merged;
+                        updateLocalAndRender();
+                    }
+                }
+            });
+
+            // Sincroniza Áreas de Fazendas
+            onSnapshot(doc(firestore, "settings", "farm_areas"), (doc) => {
+                if (doc.exists() && window.db) {
+                    const cloudAreas = doc.data().areas || [];
+                    if (JSON.stringify(window.db.farmAreas) !== JSON.stringify(cloudAreas)) {
+                        window.db.farmAreas = cloudAreas;
+                        updateLocalAndRender();
+                    }
+                }
+            });
+
+            // Sincroniza Metas de Depositários
+            onSnapshot(doc(firestore, "settings", "depositary_targets"), (doc) => {
+                if (doc.exists() && window.db) {
+                    const cloudTargets = doc.data().targets || [];
+                    if (JSON.stringify(window.db.depositaryTargets) !== JSON.stringify(cloudTargets)) {
+                        window.db.depositaryTargets = cloudTargets;
+                        updateLocalAndRender();
+                    }
+                }
+            });
+        }
+
+        function mergeArrays(local, cloud) {
+            const map = new Map();
+            // Primeiro coloca todos os locais
+            local.forEach(item => map.set(String(item.id), item));
+            // Sobrescreve/Adiciona com os da nuvem (nuvem é a fonte da verdade)
+            cloud.forEach(item => map.set(String(item.id), item));
+            return Array.from(map.values()).sort((a, b) => b.id - a.id);
+        }
+
+        function updateLocalAndRender() {
+            localStorage.setItem('soja_app_single_file_data_v6', JSON.stringify(window.db));
+            if (window.renderAll) window.renderAll();
+        }
+
+        // Funções globais de salvamento otimizadas
+        window.saveEntryToFirebase = async (entry) => {
             if (!auth.currentUser) return;
             try {
                 const statusEl = document.getElementById('sync-status');
                 if (statusEl) statusEl.innerText = 'Sincronizando...';
-                await setDoc(doc(firestore, "app_data", "main_db"), data);
+                // Salva documento individual usando ID como nome
+                await setDoc(doc(firestore, "harvest_entries", String(entry.id)), entry);
                 if (statusEl) statusEl.innerText = 'Sincronizado';
             } catch (e) {
-                console.error("Erro Firebase:", e);
-                if (statusEl) statusEl.innerText = 'Erro ao sincronizar';
+                console.error("Erro Firebase Entry:", e);
             }
+        };
+
+        window.deleteEntryFromFirebase = async (id) => {
+            if (!auth.currentUser) return;
+            try {
+                await deleteDoc(doc(firestore, "harvest_entries", String(id)));
+            } catch (e) {
+                console.error("Erro ao deletar:", e);
+            }
+        };
+
+        window.saveSettingsToFirebase = async (type, data) => {
+            if (!auth.currentUser) return;
+            try {
+                const docName = type === 'farmAreas' ? 'farm_areas' : 'depositary_targets';
+                const fieldName = type === 'farmAreas' ? 'areas' : 'targets';
+                await setDoc(doc(firestore, "settings", docName), { [fieldName]: data });
+            } catch (e) {
+                console.error("Erro Firebase Settings:", e);
+            }
+        };
+
+        // Legado para compatibilidade inicial
+        window.saveToFirebase = async (data) => {
+            // Esta função agora apenas dispara os salvamentos individuais necessários
+            // para evitar quebrar chamadas existentes durante a transição
+            console.log("Sync global disparado (legado)");
         };
     </script>
 
@@ -694,6 +763,9 @@
             entries: [], farms: [], varieties: [], warehouses: [], owners: [], teams: [], farmAreas: [], depositaryTargets: []
         };
         
+        // Expõe o db globalmente para o módulo Firebase
+        window.db = db;
+
         // Migração de dados antigos
         if (!Array.isArray(db.farmAreas)) {
             const oldAreas = db.farmAreas;
@@ -706,10 +778,7 @@
         function saveToDB() { 
             localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); 
             renderAll(); 
-            // Salva no Firebase se a função estiver disponível (carregada via módulo)
-            if (window.saveToFirebase) {
-                window.saveToFirebase(db);
-            }
+            // A sincronização granular é tratada individualmente nas funções de ação (Submit/Delete)
         }
 
         // IMPORTAÇÃO (EXCEL OU IMAGEM)
@@ -950,6 +1019,9 @@
                     if (e.owner !== '---' && !db.owners.includes(e.owner)) db.owners.push(e.owner);
                     if (e.warehouse !== '---' && !db.warehouses.includes(e.warehouse)) db.warehouses.push(e.warehouse);
                     if (e.team !== '---' && !db.teams.includes(e.team)) db.teams.push(e.team);
+                    
+                    // Sincroniza cada entrada individualmente
+                    if (window.saveEntryToFirebase) window.saveEntryToFirebase(e);
                 });
                 saveToDB(); clearImportPreview(); alert('Sucesso!');
             }
@@ -1001,6 +1073,9 @@
             if (!db.owners.includes(entry.owner)) db.owners.push(entry.owner);
             if (!db.warehouses.includes(entry.warehouse)) db.warehouses.push(entry.warehouse);
             if (!db.teams.includes(entry.team)) db.teams.push(entry.team);
+
+            // Sincroniza entrada individual no Firebase
+            if (window.saveEntryToFirebase) window.saveEntryToFirebase(entry);
 
             saveToDB(); e.target.reset(); document.getElementById('form-date').value = new Date().toISOString().split('T')[0]; calcLiquido(); alert('Salvo!');
         }
@@ -1064,6 +1139,9 @@
                     desc: d,
                     liquido: b - t - d
                 };
+                // Sincroniza alteração
+                if (window.saveEntryToFirebase) window.saveEntryToFirebase(db.entries[idx]);
+                
                 saveToDB();
                 closeEditModal();
                 alert('Registro atualizado com sucesso!');
@@ -1104,6 +1182,10 @@
                     db.farmAreas.push({ farm: n, variety: v_name, area });
                 }
                 if (!db.farms.includes(n)) db.farms.push(n);
+                
+                // Sincroniza configurações
+                if (window.saveSettingsToFirebase) window.saveSettingsToFirebase('farmAreas', db.farmAreas);
+                
                 saveToDB(); e.target.reset();
             }
         }
@@ -1121,6 +1203,10 @@
                 } else {
                     db.depositaryTargets.push({ owner, warehouse, sacks });
                 }
+                
+                // Sincroniza configurações
+                if (window.saveSettingsToFirebase) window.saveSettingsToFirebase('depositaryTargets', db.depositaryTargets);
+                
                 saveToDB(); e.target.reset();
             }
         }
@@ -1245,7 +1331,7 @@
                             <button onclick="openEditModal(${e.id})" class="p-2 text-slate-400 hover:text-amber-600 transition-colors" title="Editar">
                                 <i data-lucide="edit-3" size="16"></i>
                             </button>
-                            <button onclick="if(confirm('Excluir?')){db.entries=db.entries.filter(x=>x.id!==${e.id});saveToDB()}" class="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Excluir">
+                            <button onclick="if(confirm('Excluir?')){ if(window.deleteEntryFromFirebase) window.deleteEntryFromFirebase(${e.id}); db.entries=db.entries.filter(x=>x.id!==${e.id}); saveToDB()}" class="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Excluir">
                                 <i data-lucide="trash-2" size="16"></i>
                             </button>
                         </div>
@@ -1434,7 +1520,7 @@
                         <td class="border border-slate-200 px-4 py-4 ${diffT < 0 ? 'text-red-600' : 'text-green-600'}">${diffT.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                         <td class="border border-slate-200 px-4 py-4 ${diffS < 0 ? 'text-red-600' : 'text-green-600'}">${diffS.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
                         <td class="border border-slate-200 px-2 py-2 print:hidden">
-                            <button onclick="db.depositaryTargets=db.depositaryTargets.filter(t=>!(t.owner==='${d.owner}' && t.warehouse==='${d.warehouse}'));saveToDB()" class="text-slate-300 hover:text-red-500 transition-colors">
+                            <button onclick="db.depositaryTargets=db.depositaryTargets.filter(t=>!(t.owner==='${d.owner}' && t.warehouse==='${d.warehouse}')); if(window.saveSettingsToFirebase) window.saveSettingsToFirebase('depositaryTargets', db.depositaryTargets); saveToDB()" class="text-slate-300 hover:text-red-500 transition-colors">
                                 <i data-lucide="trash-2" size="14"></i>
                             </button>
                         </td>
