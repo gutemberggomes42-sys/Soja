@@ -250,6 +250,9 @@
             <button onclick="switchTab('harvest')" id="btn-harvest" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
                 <i data-lucide="clipboard-list" class="inline-block mr-2" size="18"></i>Colheita
             </button>
+            <button onclick="switchTab('romaneios')" id="btn-romaneios" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
+                <i data-lucide="file-check" class="inline-block mr-2" size="18"></i>Romaneios
+            </button>
             <button onclick="switchTab('deposits')" id="btn-deposits" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
                 <i data-lucide="landmark" class="inline-block mr-2" size="18"></i>Depositários
             </button>
@@ -382,6 +385,28 @@
                                     <label class="block text-[10px] font-black text-blue-200 uppercase tracking-widest">Peso Líquido Final</label>
                                     <div class="text-3xl font-black"><span id="form-liquido">0</span> <span class="text-sm font-normal">kg</span></div>
                                 </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                        <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Via Branca (Mim)</p>
+                                        <select id="form-via-branca" class="w-full bg-transparent border-0 p-0 text-[10px] font-bold focus:ring-0">
+                                            <option value="0">Pendente</option>
+                                            <option value="1">Comigo</option>
+                                            <option value="2">Floresta</option>
+                                            <option value="3">Panorama</option>
+                                            <option value="4">Na Vale</option>
+                                        </select>
+                                    </div>
+                                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                        <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Via Azul (Vale)</p>
+                                        <select id="form-via-azul" class="w-full bg-transparent border-0 p-0 text-[10px] font-bold focus:ring-0">
+                                            <option value="0">Pendente</option>
+                                            <option value="1">Comigo</option>
+                                            <option value="2">Floresta</option>
+                                            <option value="3">Panorama</option>
+                                            <option value="4">Na Vale</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                             <button type="submit" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-200">
                                 SALVAR REGISTRO
@@ -449,6 +474,153 @@
                                 <tbody id="harvest-table-body" class="divide-y divide-slate-50"></tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ROMANEIOS (CONTROLE DE VIAS) -->
+            <section id="tab-romaneios" class="hidden space-y-8">
+                <!-- Registro Rápido de Romaneio -->
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-8 rounded-[2.5rem] shadow-xl text-white">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div>
+                            <h3 class="text-xl font-black flex items-center gap-2"><i data-lucide="plus-circle" class="text-blue-400"></i>Registro Rápido de Via</h3>
+                            <p class="text-xs text-slate-400 font-medium">Use para registrar a Via Azul quando ela chegar antes do lançamento da colheita.</p>
+                        </div>
+                        <form onsubmit="handleQuickRomaneio(event)" class="flex flex-col sm:flex-row gap-3 flex-1 max-w-3xl">
+                            <input type="text" id="quick-rom-num" placeholder="Nº Romaneio" required class="flex-1 bg-slate-700/50 border-0 rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 text-white placeholder:text-slate-500">
+                            <div class="flex gap-2">
+                                <select id="quick-via-branca" class="bg-slate-700/50 border-0 rounded-2xl px-4 py-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-blue-500 text-white">
+                                    <option value="0">Branca: Pendente</option>
+                                    <option value="1">Branca: Comigo</option>
+                                    <option value="2">Branca: Floresta</option>
+                                    <option value="3">Branca: Panorama</option>
+                                    <option value="4">Branca: Vale</option>
+                                </select>
+                                <select id="quick-via-azul" class="bg-slate-700/50 border-0 rounded-2xl px-4 py-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-blue-500 text-white">
+                                    <option value="0">Azul: Pendente</option>
+                                    <option value="1" selected>Azul: Comigo</option>
+                                    <option value="2">Azul: Floresta</option>
+                                    <option value="3">Azul: Panorama</option>
+                                    <option value="4">Azul: Vale</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-2xl font-black text-xs transition-all active:scale-95 shadow-lg shadow-blue-900/20">
+                                REGISTRAR
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Painel Inteligente de Localização -->
+                <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+                    <h3 class="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                        <i data-lucide="radar" size="16" class="text-blue-500"></i> Localização Inteligente das Vias
+                    </h3>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-4" id="smart-vias-report">
+                        <!-- Gerado via JS -->
+                    </div>
+                </div>
+
+                <!-- Estatísticas das Vias -->
+                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-3">
+                        <div class="w-10 h-10 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-500">
+                            <i data-lucide="file-text" size="18"></i>
+                        </div>
+                        <div>
+                            <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest">Total</p>
+                            <h4 class="text-lg font-black" id="total-romaneios-count">0</h4>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-3">
+                        <div class="w-10 h-10 bg-red-50 rounded-2xl flex items-center justify-center text-red-500">
+                            <i data-lucide="alert-circle" size="18"></i>
+                        </div>
+                        <div>
+                            <p class="text-[8px] font-black text-red-500 uppercase tracking-widest">Pendentes</p>
+                            <h4 class="text-lg font-black" id="pending-vias-count">0</h4>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-3">
+                        <div class="w-10 h-10 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500">
+                            <i data-lucide="hand" size="18"></i>
+                        </div>
+                        <div>
+                            <p class="text-[8px] font-black text-amber-500 uppercase tracking-widest">Comigo</p>
+                            <h4 class="text-lg font-black" id="with-user-vias-count">0</h4>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-3">
+                        <div class="w-10 h-10 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-500">
+                            <i data-lucide="building-2" size="18"></i>
+                        </div>
+                        <div>
+                            <p class="text-[8px] font-black text-purple-500 uppercase tracking-widest">Floresta</p>
+                            <h4 class="text-lg font-black" id="floresta-vias-count">0</h4>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-3">
+                        <div class="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-500">
+                            <i data-lucide="map-pin" size="18"></i>
+                        </div>
+                        <div>
+                            <p class="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Panorama</p>
+                            <h4 class="text-lg font-black" id="panorama-vias-count">0</h4>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-3">
+                        <div class="w-10 h-10 bg-green-50 rounded-2xl flex items-center justify-center text-green-500">
+                            <i data-lucide="check-circle-2" size="18"></i>
+                        </div>
+                        <div>
+                            <p class="text-[8px] font-black text-green-500 uppercase tracking-widest">Vale</p>
+                            <h4 class="text-lg font-black" id="at-vale-vias-count">0</h4>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de Controle -->
+                <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-8 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-50/20">
+                        <h2 class="text-xl font-black text-slate-800 flex items-center gap-2">
+                            <i data-lucide="file-check" class="text-blue-600"></i>Controle de Vias de Romaneio
+                        </h2>
+                        <div class="flex flex-wrap gap-4 print:hidden">
+                            <button onclick="window.print()" class="flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
+                                <i data-lucide="printer" size="16"></i> IMPRIMIR
+                            </button>
+                            <div class="relative min-w-[180px]">
+                                <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size="16"></i>
+                                <input type="text" id="filter-rom-num" oninput="renderRomaneios()" placeholder="Buscar (Nº, Faz, Equipe...)" class="pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-blue-500 w-full">
+                            </div>
+                            <select id="filter-rom-status" onchange="renderRomaneios()" class="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-blue-500 text-slate-600">
+                                <option value="all">Todos os Status</option>
+                                <option value="pending">Pendente (Geral)</option>
+                                <option value="with_me">Apenas Comigo</option>
+                                <option value="complete">Apenas Concluídos</option>
+                            </select>
+                            <select id="filter-rom-location" onchange="renderRomaneios()" class="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-blue-500 text-slate-600">
+                                <option value="all">Qualquer Localização</option>
+                                <option value="floresta">Na Floresta</option>
+                                <option value="panorama">Na Panorama</option>
+                                <option value="vale">Na Vale</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
+                                    <th class="px-8 py-5">Data / Romaneio</th>
+                                    <th class="px-8 py-5">Fazenda / Equipe</th>
+                                    <th class="px-8 py-5 text-center">Via Branca (Mim)</th>
+                                    <th class="px-8 py-5 text-center">Via Azul (Vale)</th>
+                                    <th class="px-8 py-5 text-right">Status Final</th>
+                                </tr>
+                            </thead>
+                            <tbody id="romaneios-table-body" class="divide-y divide-slate-50"></tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -759,6 +931,31 @@
                     <label class="block text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">Novo Peso Líquido</label>
                     <div class="text-3xl font-black"><span id="edit-liquido">0</span> kg</div>
                 </div>
+                
+                <!-- Controle de Vias no Edit -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Via Branca (Mim)</p>
+                        <select id="edit-via-branca" class="w-full bg-white border-0 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500">
+                            <option value="0">Pendente</option>
+                            <option value="1">Comigo (Em Mãos)</option>
+                            <option value="2">Na Floresta</option>
+                            <option value="3">Na Panorama</option>
+                            <option value="4">Entregue na Vale</option>
+                        </select>
+                    </div>
+                    <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Via Azul (Vale)</p>
+                        <select id="edit-via-azul" class="w-full bg-white border-0 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500">
+                            <option value="0">Pendente</option>
+                            <option value="1">Comigo (Em Mãos)</option>
+                            <option value="2">Na Floresta</option>
+                            <option value="3">Na Panorama</option>
+                            <option value="4">Entregue na Vale</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div class="flex gap-4">
                     <button type="button" onclick="closeEditModal()" class="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all">CANCELAR</button>
                     <button type="submit" class="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition-all shadow-xl shadow-blue-100">SALVAR ALTERAÇÕES</button>
@@ -857,6 +1054,12 @@
             return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         };
 
+        // Helper para extrair partes de um romaneio (ex: "16051 / 16052" -> ["16051", "16052"])
+        const extractRomaneioParts = (str) => {
+            if (!str) return [];
+            return str.split(/[\/\s\-\,]+/).map(s => s.trim()).filter(s => s.length > 0);
+        };
+
         function saveToDB() { 
             localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); 
             renderAll(); 
@@ -934,7 +1137,9 @@
                     variety: findCol(['Variedade', 'VARIEDADE', 'CULTIVAR']) || '---',
                     team: findCol(['Equipe', 'EQUIPE', 'COLHEITA']) || '---',
                     obs: findCol(['Observação', 'OBSERVAÇÃO', 'OBS']) || 'Importado via Excel',
-                    bruto, tara, desc, liquido
+                    bruto, tara, desc, liquido,
+                    viaBranca: false,
+                    viaAzul: false
                 };
             }).filter(e => e.bruto > 0);
             renderImportPreview();
@@ -982,7 +1187,9 @@
                         team: detect(line, ['FERREIRA', 'ANTONIO AIRES', 'EQUIPE', 'COLHEITA', '0164-C']),
                         ticket: ticket,
                         obs: detectedObs,
-                        bruto: 0, tara: 0, desc: 0, liquido: 0
+                        bruto: 0, tara: 0, desc: 0, liquido: 0,
+                        viaBranca: false,
+                        viaAzul: false
                     };
 
                     // Lógica robusta para pesos (Bruto, Tara, Desc, Liq)
@@ -1064,12 +1271,20 @@
             const tbody = document.getElementById('import-preview-body');
             if (importPreviewData.length > 0) {
                 section.classList.remove('hidden');
-                tbody.innerHTML = importPreviewData.map((e, idx) => `
-                    <tr class="hover:bg-amber-100/50 text-[10px]">
-                        <td class="px-2 py-3">
-                            <input type="text" value="${e.farm}" onchange="importPreviewData[${idx}].farm=this.value" class="bg-transparent w-full font-bold border-b border-amber-200 focus:border-amber-500 outline-none" title="Fazenda">
-                            <input type="text" value="${e.variety}" onchange="importPreviewData[${idx}].variety=this.value" class="bg-transparent w-full text-[8px] text-amber-600 mt-1 uppercase border-b border-transparent hover:border-amber-200 outline-none" title="Variedade">
-                        </td>
+                tbody.innerHTML = importPreviewData.map((e, idx) => {
+                    const parts = extractRomaneioParts(e.romaneio);
+                    const isDuplicate = db.entries.some(entry => {
+                        const entryParts = extractRomaneioParts(entry.romaneio);
+                        return entry.farm !== '---' && parts.some(p => entryParts.includes(p));
+                    });
+
+                    return `
+                        <tr class="${isDuplicate ? 'bg-red-50 opacity-60' : 'hover:bg-amber-100/50'} text-[10px] transition-all">
+                            <td class="px-2 py-3">
+                                ${isDuplicate ? '<span class="block text-[8px] text-red-500 font-black mb-1 uppercase">Já Lançado</span>' : ''}
+                                <input type="text" value="${e.farm}" onchange="importPreviewData[${idx}].farm=this.value" class="bg-transparent w-full font-bold border-b border-amber-200 focus:border-amber-500 outline-none" title="Fazenda">
+                                <input type="text" value="${e.variety}" onchange="importPreviewData[${idx}].variety=this.value" class="bg-transparent w-full text-[8px] text-amber-600 mt-1 uppercase border-b border-transparent hover:border-amber-200 outline-none" title="Variedade">
+                            </td>
                         <td class="px-2 py-3">
                             <input type="text" value="${e.owner}" onchange="importPreviewData[${idx}].owner=this.value" class="bg-transparent w-full border-b border-amber-200 focus:border-amber-500 outline-none" title="Depositário">
                             <input type="text" value="${e.warehouse}" onchange="importPreviewData[${idx}].warehouse=this.value" class="bg-transparent w-full text-[8px] text-amber-600 mt-1 uppercase border-b border-transparent hover:border-amber-200 outline-none" title="Armazém">
@@ -1095,7 +1310,8 @@
                             </button>
                         </td>
                     </tr>
-                `).join('');
+                `;
+                }).join('');
                 lucide.createIcons();
             } else { section.classList.add('hidden'); }
         }
@@ -1103,17 +1319,53 @@
         function clearImportPreview() { importPreviewData = []; document.getElementById('import-preview-section').classList.add('hidden'); }
 
         function saveBulkEntries() {
-            if (confirm(`Salvar ${importPreviewData.length} registros?`)) {
-                importPreviewData.forEach(e => {
-                    db.entries.push(e);
+            // Filtra duplicados antes de salvar
+            const newEntries = importPreviewData.filter(e => {
+                const parts = extractRomaneioParts(e.romaneio);
+                const exists = db.entries.some(entry => {
+                    const entryParts = extractRomaneioParts(entry.romaneio);
+                    // Só considera duplicado se o registro existente já tiver dados de colheita (farm !== '---')
+                    return entry.farm !== '---' && parts.some(p => entryParts.includes(p));
+                });
+                return !exists;
+            });
+
+            const dupeCount = importPreviewData.length - newEntries.length;
+
+            if (newEntries.length === 0) {
+                alert(`Todos os ${importPreviewData.length} registros já estão cadastrados no sistema.`);
+                clearImportPreview();
+                return;
+            }
+
+            if (confirm(`Salvar ${newEntries.length} novos registros? ${dupeCount > 0 ? `(${dupeCount} duplicados serão ignorados)` : ''}`)) {
+                newEntries.forEach(e => {
+                    // Verifica se existe um placeholder (Registro Rápido) para preencher
+                    const parts = extractRomaneioParts(e.romaneio);
+                    const placeholderIdx = db.entries.findIndex(entry => {
+                        const entryParts = extractRomaneioParts(entry.romaneio);
+                        return entry.farm === '---' && parts.some(p => entryParts.includes(p));
+                    });
+
+                    if (placeholderIdx !== -1) {
+                        const current = db.entries[placeholderIdx];
+                        db.entries[placeholderIdx] = {
+                            ...current,
+                            ...e,
+                            viaBranca: Math.max(current.viaBranca || 0, e.viaBranca || 0),
+                            viaAzul: Math.max(current.viaAzul || 0, e.viaAzul || 0)
+                        };
+                        if (window.saveEntryToFirebase) window.saveEntryToFirebase(db.entries[placeholderIdx]);
+                    } else {
+                        db.entries.push(e);
+                        if (window.saveEntryToFirebase) window.saveEntryToFirebase(e);
+                    }
+
                     if (e.farm !== '---' && !db.farms.includes(e.farm)) db.farms.push(e.farm);
                     if (e.variety !== '---' && !db.varieties.includes(e.variety)) db.varieties.push(e.variety);
                     if (e.owner !== '---' && !db.owners.includes(e.owner)) db.owners.push(e.owner);
                     if (e.warehouse !== '---' && !db.warehouses.includes(e.warehouse)) db.warehouses.push(e.warehouse);
                     if (e.team !== '---' && !db.teams.includes(e.team)) db.teams.push(e.team);
-                    
-                    // Sincroniza cada entrada individualmente
-                    if (window.saveEntryToFirebase) window.saveEntryToFirebase(e);
                 });
                 saveToDB(); clearImportPreview(); alert('Sucesso!');
             }
@@ -1121,7 +1373,7 @@
 
         // NAVIGATION & UI
         function switchTab(id) {
-            ['dashboard', 'harvest', 'deposits', 'farms', 'reports'].forEach(t => {
+            ['dashboard', 'harvest', 'romaneios', 'deposits', 'farms', 'reports'].forEach(t => {
                 document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== id);
                 document.getElementById(`btn-${t}`).classList.toggle('tab-active', t === id);
                 document.getElementById(`btn-${t}`).classList.toggle('tab-inactive', t !== id);
@@ -1138,38 +1390,161 @@
 
         function handleFormSubmit(e) {
             e.preventDefault();
-            const entry = {
-                id: Date.now(),
+            const romaneioNum = document.getElementById('form-romaneio').value.trim();
+            const newParts = extractRomaneioParts(romaneioNum);
+            
+            // Busca se já existe um registro deste romaneio (mesmo que seja um placeholder do Registro Rápido)
+            // Agora verifica se QUALQUER parte do novo romaneio existe em QUALQUER registro
+            const existingIdx = db.entries.findIndex(entry => {
+                const entryParts = extractRomaneioParts(entry.romaneio);
+                return newParts.some(p => entryParts.includes(p));
+            });
+            
+            const entryData = {
                 date: document.getElementById('form-date').value,
                 farm: document.getElementById('form-farm').value.trim(),
                 variety: document.getElementById('form-variety').value.trim(),
                 owner: document.getElementById('form-owner').value.trim(),
                 warehouse: document.getElementById('form-warehouse').value.trim(),
                 team: document.getElementById('form-team').value.trim(),
-                romaneio: document.getElementById('form-romaneio').value.trim(),
+                romaneio: romaneioNum,
                 obs: document.getElementById('form-obs').value.trim(),
                 ticket: document.getElementById('form-ticket').value.trim(),
                 bruto: parseFloat(document.getElementById('form-bruto').value),
                 tara: parseFloat(document.getElementById('form-tara').value),
                 desc: parseFloat(document.getElementById('form-desc').value) || 0,
-                liquido: parseFloat(document.getElementById('form-bruto').value) - parseFloat(document.getElementById('form-tara').value) - (parseFloat(document.getElementById('form-desc').value) || 0)
+                liquido: parseFloat(document.getElementById('form-bruto').value) - parseFloat(document.getElementById('form-tara').value) - (parseFloat(document.getElementById('form-desc').value) || 0),
+                viaBranca: parseInt(document.getElementById('form-via-branca').value),
+                viaAzul: parseInt(document.getElementById('form-via-azul').value)
             };
-            db.entries.push(entry);
+
+            let finalEntry;
+
+            if (existingIdx !== -1) {
+                const foundRom = db.entries[existingIdx].romaneio;
+                const isPlaceholder = db.entries[existingIdx].farm === '---' || !db.entries[existingIdx].farm;
+                
+                if (isPlaceholder) {
+                    // Se for apenas um registro rápido de via, atualizamos com os dados da colheita
+                    const currentEntry = db.entries[existingIdx];
+                    finalEntry = {
+                        ...currentEntry,
+                        ...entryData,
+                        viaBranca: Math.max(currentEntry.viaBranca || 0, entryData.viaBranca),
+                        viaAzul: Math.max(currentEntry.viaAzul || 0, entryData.viaAzul)
+                    };
+                    db.entries[existingIdx] = finalEntry;
+                } else {
+                    // SE JÁ TIVER DADOS DE COLHEITA, É UMA DUPLICATA REAL -> BLOQUEIA
+                    alert(`ERRO: O Romaneio ${foundRom} já foi lançado na colheita anteriormente!\n\nLocalizando registro...`);
+                    
+                    // Redireciona para o registro existente para facilitar localização
+                    switchTab('romaneios');
+                    document.getElementById('filter-rom-num').value = newParts[0];
+                    renderRomaneios();
+                    
+                    const safeId = String(foundRom).replace(/[^a-z0-9]/gi, '_');
+                    const row = document.getElementById(`rom-row-${safeId}`);
+                    if (row) {
+                        row.classList.add('bg-amber-100');
+                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        setTimeout(() => row.classList.remove('bg-amber-100'), 3000);
+                    }
+                    return; // Interrompe o salvamento
+                }
+            } else {
+                finalEntry = { id: Date.now(), ...entryData };
+                db.entries.push(finalEntry);
+            }
+
             ['farms', 'varieties', 'owners', 'warehouses', 'teams'].forEach(k => {
-                const val = entry[k.endsWith('ies') ? k.slice(0, -3) + 'y' : k.slice(0, -1)]; // simplificação de chave
-                if (val && !db[k].includes(val)) db[k].push(val);
+                const val = finalEntry[k.endsWith('ies') ? k.slice(0, -3) + 'y' : k.slice(0, -1)]; // simplificação de chave
+                if (val && val !== '---' && !db[k].includes(val)) db[k].push(val);
             });
             // Correção manual das coleções (simplificada acima mas garantida aqui)
-            if (!db.farms.includes(entry.farm)) db.farms.push(entry.farm);
-            if (!db.varieties.includes(entry.variety)) db.varieties.push(entry.variety);
-            if (!db.owners.includes(entry.owner)) db.owners.push(entry.owner);
-            if (!db.warehouses.includes(entry.warehouse)) db.warehouses.push(entry.warehouse);
-            if (!db.teams.includes(entry.team)) db.teams.push(entry.team);
+            if (finalEntry.farm !== '---' && !db.farms.includes(finalEntry.farm)) db.farms.push(finalEntry.farm);
+            if (finalEntry.variety !== '---' && !db.varieties.includes(finalEntry.variety)) db.varieties.push(finalEntry.variety);
+            if (finalEntry.owner !== '---' && !db.owners.includes(finalEntry.owner)) db.owners.push(finalEntry.owner);
+            if (finalEntry.warehouse !== '---' && !db.warehouses.includes(finalEntry.warehouse)) db.warehouses.push(finalEntry.warehouse);
+            if (finalEntry.team !== '---' && !db.teams.includes(finalEntry.team)) db.teams.push(finalEntry.team);
 
             // Sincroniza entrada individual no Firebase
-            if (window.saveEntryToFirebase) window.saveEntryToFirebase(entry);
+            if (window.saveEntryToFirebase) window.saveEntryToFirebase(finalEntry);
 
-            saveToDB(); e.target.reset(); document.getElementById('form-date').value = new Date().toISOString().split('T')[0]; calcLiquido(); alert('Salvo!');
+            saveToDB(); 
+            e.target.reset(); 
+            document.getElementById('form-date').value = new Date().toISOString().split('T')[0]; 
+            document.getElementById('form-via-branca').value = "0";
+            document.getElementById('form-via-azul').value = "0";
+            calcLiquido(); 
+            alert('Registro salvo e sincronizado!');
+        }
+
+        function handleQuickRomaneio(e) {
+             e.preventDefault();
+             const romNum = document.getElementById('quick-rom-num').value.trim();
+             const vB = parseInt(document.getElementById('quick-via-branca').value);
+             const vA = parseInt(document.getElementById('quick-via-azul').value);
+ 
+             if (!romNum) return;
+             const newParts = extractRomaneioParts(romNum);
+ 
+             // Verifica se já existe
+             const existing = db.entries.find(entry => {
+                 const entryParts = extractRomaneioParts(entry.romaneio);
+                 return newParts.some(p => entryParts.includes(p));
+             });
+             
+             if (existing) {
+                 // Se o romaneio já existe e não é um placeholder (já tem fazenda), damos erro e redirecionamos
+                 const hasRealData = existing.farm !== '---' && existing.farm;
+                 if (hasRealData) {
+                     alert(`ERRO: O Romaneio Nº ${existing.romaneio} já foi lançado na colheita anteriormente! Vamos te mostrar onde ele está.`);
+                     
+                     // Redirecionamento inteligente
+                     switchTab('romaneios');
+                     document.getElementById('filter-rom-num').value = newParts[0];
+                     renderRomaneios();
+                     
+                     // Efeito visual de destaque
+                     const safeId = String(existing.romaneio).replace(/[^a-z0-9]/gi, '_');
+                     const row = document.getElementById(`rom-row-${safeId}`);
+                     if (row) {
+                        row.classList.add('bg-amber-100');
+                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        setTimeout(() => row.classList.remove('bg-amber-100'), 3000);
+                     }
+                     return;
+                 }
+
+                 // Se for apenas um placeholder, atualizamos o status das vias
+                 existing.viaBranca = Math.max(existing.viaBranca || 0, vB);
+                 existing.viaAzul = Math.max(existing.viaAzul || 0, vA);
+                 if (window.saveEntryToFirebase) window.saveEntryToFirebase(existing);
+                 alert(`Status do Romaneio ${romNum} atualizado!`);
+             } else {
+                const entry = {
+                    id: Date.now(),
+                    date: new Date().toISOString().split('T')[0],
+                    romaneio: romNum,
+                    viaBranca: vB,
+                    viaAzul: vA,
+                    farm: '---', // Indica que aguarda lançamento de colheita
+                    variety: '---',
+                    team: '---',
+                    owner: '---',
+                    warehouse: '---',
+                    ticket: '---',
+                    bruto: 0, tara: 0, desc: 0, liquido: 0,
+                    obs: 'Registrado via Lançamento Rápido'
+                };
+                db.entries.push(entry);
+                if (window.saveEntryToFirebase) window.saveEntryToFirebase(entry);
+                alert(`Romaneio ${romNum} registrado! Aguardando lançamento de colheita.`);
+            }
+
+            saveToDB();
+            e.target.reset();
         }
 
         // EDIT & PRINT FUNCTIONS
@@ -1189,6 +1564,8 @@
             document.getElementById('edit-bruto').value = entry.bruto;
             document.getElementById('edit-tara').value = entry.tara;
             document.getElementById('edit-desc').value = entry.desc || 0;
+            document.getElementById('edit-via-branca').value = entry.viaBranca || 0;
+            document.getElementById('edit-via-azul').value = entry.viaAzul || 0;
             
             calcEditLiquido();
             document.getElementById('edit-modal').classList.remove('hidden');
@@ -1229,7 +1606,9 @@
                     bruto: b,
                     tara: t,
                     desc: d,
-                    liquido: b - t - d
+                    liquido: b - t - d,
+                    viaBranca: parseInt(document.getElementById('edit-via-branca').value),
+                    viaAzul: parseInt(document.getElementById('edit-via-azul').value)
                 };
                 // Sincroniza alteração
                 if (window.saveEntryToFirebase) window.saveEntryToFirebase(db.entries[idx]);
@@ -1364,6 +1743,7 @@
         // RENDERS
         function renderAll() { 
             renderHarvest(); 
+            renderRomaneios();
             renderDashboard(); 
             renderDeposits(); 
             renderFarms(); 
@@ -1396,13 +1776,16 @@
         }
 
         function renderHarvest() {
-            const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
+            // Filtra apenas entradas REAIS (que já têm fazenda lançada)
+            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+            
+            const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
             document.getElementById('total-sacks-val').innerText = (totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
 
             const farmFilter = removeAccents(document.getElementById('filter-harvest-farm')?.value || '').toUpperCase();
             const varietyFilter = removeAccents(document.getElementById('filter-harvest-variety')?.value || '').toUpperCase();
 
-            const filteredEntries = db.entries.filter(e => {
+            const filteredEntries = realEntries.filter(e => {
                 const matchesFarm = !farmFilter || removeAccents(e.farm).toUpperCase().includes(farmFilter) || removeAccents(e.romaneio).toUpperCase().includes(farmFilter);
                 const matchesVariety = !varietyFilter || removeAccents(e.variety).toUpperCase().includes(varietyFilter) || removeAccents(e.team).toUpperCase().includes(varietyFilter);
                 return matchesFarm && matchesVariety;
@@ -1414,6 +1797,10 @@
                         <div class="font-bold text-slate-700">${new Date(e.date).toLocaleDateString('pt-BR')}</div>
                         <div class="text-[10px] text-blue-600 font-black">ROM: ${e.romaneio}</div>
                         ${e.ticket && e.ticket !== '---' ? `<div class="text-[9px] text-slate-400">Tkt: ${e.ticket}</div>` : ''}
+                        <div class="flex gap-1 mt-1">
+                            <span class="w-2 h-2 rounded-full ${e.viaBranca === 4 ? 'bg-green-500' : (e.viaBranca === 1 ? 'bg-amber-400' : (e.viaBranca === 2 ? 'bg-purple-400' : (e.viaBranca === 3 ? 'bg-indigo-400' : 'bg-slate-200')))}" title="Via Branca: ${e.viaBranca === 4 ? 'Na Vale' : (e.viaBranca === 1 ? 'Comigo' : (e.viaBranca === 2 ? 'Floresta' : (e.viaBranca === 3 ? 'Panorama' : 'Pendente')))}"></span>
+                            <span class="w-2 h-2 rounded-full ${e.viaAzul === 4 ? 'bg-blue-500' : (e.viaAzul === 1 ? 'bg-amber-400' : (e.viaAzul === 2 ? 'bg-purple-400' : (e.viaAzul === 3 ? 'bg-indigo-400' : 'bg-slate-200')))}" title="Via Azul: ${e.viaAzul === 4 ? 'Na Vale' : (e.viaAzul === 1 ? 'Comigo' : (e.viaAzul === 2 ? 'Floresta' : (e.viaAzul === 3 ? 'Panorama' : 'Pendente')))}"></span>
+                        </div>
                     </td>
                     <td class="px-6 py-4">
                         <div class="font-black text-slate-800 uppercase">${e.farm}</div>
@@ -1447,8 +1834,164 @@
             `).join('') || '<tr><td colspan="5" class="py-12 text-center text-slate-300">Nenhum registro encontrado</td></tr>';
         }
 
+        function renderRomaneios() {
+            const body = document.getElementById('romaneios-table-body');
+            const romFilter = removeAccents(document.getElementById('filter-rom-num')?.value || '').toUpperCase();
+            const statusFilter = document.getElementById('filter-rom-status')?.value || 'all';
+            const locationFilter = document.getElementById('filter-rom-location')?.value || 'all';
+
+            const filtered = db.entries.filter(e => {
+                const matchesSearch = !romFilter || 
+                    removeAccents(e.romaneio).toUpperCase().includes(romFilter) || 
+                    removeAccents(e.ticket).toUpperCase().includes(romFilter) ||
+                    removeAccents(e.farm).toUpperCase().includes(romFilter) ||
+                    removeAccents(e.team).toUpperCase().includes(romFilter) ||
+                    removeAccents(e.warehouse || '').toUpperCase().includes(romFilter);
+                
+                let matchesStatus = true;
+                if (statusFilter === 'pending') matchesStatus = e.viaBranca === 0 || e.viaAzul === 0;
+                if (statusFilter === 'with_me') matchesStatus = e.viaBranca === 1 || e.viaAzul === 1;
+                if (statusFilter === 'complete') matchesStatus = e.viaBranca === 4 && e.viaAzul === 4;
+
+                let matchesLocation = true;
+                if (locationFilter === 'floresta') matchesLocation = e.viaBranca === 2 || e.viaAzul === 2;
+                if (locationFilter === 'panorama') matchesLocation = e.viaBranca === 3 || e.viaAzul === 3;
+                if (locationFilter === 'vale') matchesLocation = e.viaBranca === 4 || e.viaAzul === 4;
+
+                return matchesSearch && matchesStatus && matchesLocation;
+            });
+
+            // Stats e Relatório Inteligente
+            document.getElementById('total-romaneios-count').innerText = db.entries.length;
+            
+            // Contagem por estado: 0: Pendente, 1: Comigo, 2: Floresta, 3: Panorama, 4: Vale
+            const countVias = (state) => db.entries.reduce((acc, e) => acc + (e.viaBranca === state ? 1 : 0) + (e.viaAzul === state ? 1 : 0), 0);
+            
+            const stats = {
+                pending: countVias(0),
+                withMe: countVias(1),
+                floresta: countVias(2),
+                panorama: countVias(3),
+                vale: countVias(4)
+            };
+
+            document.getElementById('pending-vias-count').innerText = stats.pending;
+            document.getElementById('with-user-vias-count').innerText = stats.withMe;
+            document.getElementById('floresta-vias-count').innerText = stats.floresta;
+            document.getElementById('panorama-vias-count').innerText = stats.panorama;
+            document.getElementById('at-vale-vias-count').innerText = stats.vale;
+
+            // Renderiza Relatório Inteligente (cards)
+            const smartReport = document.getElementById('smart-vias-report');
+            const locations = [
+                { id: 'pending', label: 'Pendentes', count: stats.pending, color: 'red', icon: 'alert-circle' },
+                { id: 'withMe', label: 'Comigo', count: stats.withMe, color: 'amber', icon: 'hand' },
+                { id: 'floresta', label: 'Floresta', count: stats.floresta, color: 'purple', icon: 'building-2' },
+                { id: 'panorama', label: 'Panorama', count: stats.panorama, color: 'indigo', icon: 'map-pin' },
+                { id: 'vale', label: 'Na Vale', count: stats.vale, color: 'green', icon: 'check-circle-2' }
+            ];
+
+            smartReport.innerHTML = locations.map(loc => `
+                <div class="p-4 rounded-2xl border border-${loc.color}-100 bg-${loc.color}-50/30 flex flex-col items-center text-center">
+                    <div class="w-8 h-8 rounded-full bg-${loc.color}-100 text-${loc.color}-600 flex items-center justify-center mb-2">
+                        <i data-lucide="${loc.icon}" size="14"></i>
+                    </div>
+                    <p class="text-[8px] font-black text-${loc.color}-400 uppercase tracking-widest">${loc.label}</p>
+                    <h5 class="text-xl font-black text-${loc.color}-700">${loc.count} <span class="text-[10px] font-medium">vias</span></h5>
+                </div>
+            `).join('');
+
+            body.innerHTML = filtered.sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => {
+                const getViaButton = (type, value) => {
+                    let label = 'Pendente';
+                    let colorClass = 'bg-slate-100 text-slate-400 hover:bg-amber-50';
+                    let icon = 'circle';
+                    
+                    if (value === 1) {
+                        label = 'Comigo';
+                        colorClass = 'bg-amber-100 text-amber-700 hover:bg-purple-50';
+                        icon = 'hand';
+                    } else if (value === 2) {
+                        label = 'Floresta';
+                        colorClass = 'bg-purple-100 text-purple-700 hover:bg-indigo-50';
+                        icon = 'building-2';
+                    } else if (value === 3) {
+                        label = 'Panorama';
+                        colorClass = 'bg-indigo-100 text-indigo-700 hover:bg-green-50';
+                        icon = 'map-pin';
+                    } else if (value === 4) {
+                        label = 'Na Vale';
+                        colorClass = type === 'viaBranca' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700';
+                        icon = 'check-circle-2';
+                    }
+                    
+                    return `
+                        <button onclick="cycleViaStatus(${e.id}, '${type}')" class="group relative inline-flex items-center gap-2 px-4 py-3 rounded-2xl transition-all ${colorClass} w-full justify-center border border-transparent hover:border-slate-200">
+                            <i data-lucide="${icon}" size="16"></i>
+                            <span class="text-[10px] font-black uppercase tracking-widest">${label}</span>
+                        </button>
+                    `;
+                };
+
+                const isComplete = e.viaBranca === 4 && e.viaAzul === 4;
+                const safeId = String(e.romaneio).replace(/[^a-z0-9]/gi, '_');
+                
+                return `
+                    <tr class="hover:bg-slate-50 transition-colors" id="rom-row-${safeId}">
+                        <td class="px-8 py-6">
+                            <div class="font-bold text-slate-700">${new Date(e.date).toLocaleDateString('pt-BR')}</div>
+                            <div class="text-xs text-blue-600 font-black tracking-tight">ROM: ${e.romaneio}</div>
+                        </td>
+                        <td class="px-8 py-6">
+                            <div class="font-black text-slate-800 uppercase text-xs">
+                                ${e.farm === '---' ? '<span class="text-amber-500 italic">AGUARDANDO LANÇAMENTO</span>' : e.farm}
+                            </div>
+                            <div class="text-[10px] text-slate-400 font-bold uppercase">${e.team}</div>
+                            ${e.warehouse && e.warehouse !== '---' ? `<div class="text-[9px] text-blue-500 font-black mt-1 uppercase"><i data-lucide="warehouse" class="inline-block mr-1" size="10"></i>${e.warehouse}</div>` : ''}
+                        </td>
+                        <td class="px-8 py-6 text-center w-64">
+                            ${getViaButton('viaBranca', e.viaBranca || 0)}
+                        </td>
+                        <td class="px-8 py-6 text-center w-64">
+                            ${getViaButton('viaAzul', e.viaAzul || 0)}
+                        </td>
+                        <td class="px-8 py-6 text-right">
+                            <div class="flex items-center justify-end gap-3">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${isComplete ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'}">
+                                    ${isComplete ? 'Concluído' : 'Em Fluxo'}
+                                </span>
+                                <button onclick="if(confirm('Excluir este romaneio?')){ if(window.deleteEntryFromFirebase) window.deleteEntryFromFirebase(${e.id}); db.entries=db.entries.filter(x=>x.id!==${e.id}); saveToDB()}" class="p-2 text-slate-300 hover:text-red-500 transition-colors" title="Excluir">
+                                    <i data-lucide="trash-2" size="14"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('') || '<tr><td colspan="5" class="py-12 text-center text-slate-300">Nenhum romaneio encontrado</td></tr>';
+            
+            lucide.createIcons();
+        }
+
+        function cycleViaStatus(id, type) {
+            const entry = db.entries.find(e => e.id === id);
+            if (entry) {
+                // Ciclo: 0 (Pendente) -> 1 (Comigo) -> 2 (Floresta) -> 3 (Panorama) -> 4 (Vale) -> 0
+                let current = entry[type] || 0;
+                entry[type] = (current + 1) % 5;
+                
+                if (window.saveEntryToFirebase) window.saveEntryToFirebase(entry);
+                saveToDB();
+            }
+        }
+
+        function toggleVia(id, type) {
+            // Esta função agora apenas chama o ciclo para manter compatibilidade se necessário
+            cycleViaStatus(id, type);
+        }
+
         function renderDashboard() {
-            const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
+            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+            const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
             const totalSacks = totalKg / 60;
             const totalArea = db.farmAreas.reduce((acc, curr) => acc + curr.area, 0);
             const avgProd = totalArea > 0 ? totalSacks / totalArea : 0;
@@ -1461,20 +2004,21 @@
             `;
 
             const groups = {};
-            db.entries.forEach(e => { const k = `${e.farm}-${e.variety}`; groups[k] = (groups[k] || 0) + e.liquido; });
+            realEntries.forEach(e => { const k = `${e.farm}-${e.variety}`; groups[k] = (groups[k] || 0) + e.liquido; });
             document.getElementById('dashboard-table-body').innerHTML = Object.entries(groups).map(([k, v]) => `
                 <tr class="hover:bg-slate-50"><td class="px-8 py-6 font-black">${k.split('-')[0]}</td><td class="px-8 py-6"><span class="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold">${k.split('-')[1]}</span></td><td class="px-8 py-6 text-right font-bold">${(v/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td><td class="px-8 py-6 text-right font-black">${(v/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td></tr>
             `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Vazio</td></tr>';
         }
 
         function renderDeposits() {
-            const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
+            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+            const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
             document.getElementById('deposit-summary').innerHTML = `
                 <div class="bg-slate-900 p-8 rounded-[2rem] text-white shadow-2xl md:col-span-2"><p class="text-[10px] font-black text-slate-400 uppercase">Total Geral Depositado</p><h4 class="text-4xl font-black">${(totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} sacos</h4></div>
                 <div class="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-center"><p class="text-[10px] font-black text-slate-400 uppercase">Depositários</p><h4 class="text-3xl font-black">${db.owners.length}</h4></div>
             `;
             const groups = {};
-            db.entries.forEach(e => { const k = `${e.owner}-${e.warehouse}`; groups[k] = (groups[k] || 0) + e.liquido; });
+            realEntries.forEach(e => { const k = `${e.owner}-${e.warehouse}`; groups[k] = (groups[k] || 0) + e.liquido; });
             document.getElementById('deposits-table-body').innerHTML = Object.entries(groups).map(([k, v]) => `
                 <tr class="hover:bg-slate-50"><td class="px-8 py-6 font-black uppercase">${k.split('-')[0]}</td><td class="px-8 py-6 font-bold text-slate-500">${k.split('-')[1]}</td><td class="px-8 py-6 text-right font-bold text-slate-400">${(v/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td><td class="px-8 py-6 text-right font-black">${(v/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td></tr>
             `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Vazio</td></tr>';
@@ -1523,7 +2067,10 @@
             const teamFilter = removeAccents(document.getElementById('filter-rep-team')?.value || '').toUpperCase();
             const dataMap = {};
 
-            db.entries.forEach(e => {
+            // Filtra apenas entradas REAIS
+            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+
+            realEntries.forEach(e => {
                 const teamName = e.team || 'Não Informada';
                 if (!dataMap[teamName]) {
                     dataMap[teamName] = { 
@@ -1631,7 +2178,10 @@
             });
 
             // Soma colheitas reais usando busca inteligente
-            db.entries.forEach(entry => {
+            // Filtra apenas entradas REAIS
+            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+
+            realEntries.forEach(entry => {
                 const entryFarmCode = extractCode(entry.farm);
                 const entryFarmKey = normalizeFarm(entry.farm);
                 const entryVarietyNorm = normalizeVariety(entry.variety);
@@ -1770,7 +2320,11 @@
         function renderDepositaryReport() {
             const body = document.getElementById('report-deposit-body');
             const dataMap = {};
-            db.entries.forEach(e => {
+            
+            // Filtra apenas entradas REAIS
+            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+
+            realEntries.forEach(e => {
                 const k = `${e.owner}-${e.warehouse}`;
                 if (!dataMap[k]) dataMap[k] = { owner: e.owner, warehouse: e.warehouse, targetSacks: 0, depositedKg: 0 };
                 dataMap[k].depositedKg += e.liquido;
