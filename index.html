@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cambuí - Colheita de Soja 2024/2025</title>
+    <!-- Tailwind CSS para estilização moderna -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons para ícones bonitos -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); }
+        .tab-active { color: #2563eb; border-bottom: 2px solid #2563eb; }
+        .tab-inactive { color: #64748b; }
+        .tab-inactive:hover { color: #334155; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <div id="app" class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Header Principal -->
+        <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <div>
+                <h1 class="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                    <i data-lucide="sprout" class="text-green-600"></i>
+                    Cambuí Colheita de Soja
+                </h1>
+                <p class="text-blue-600 font-bold tracking-wide">Monitoramento Safra 2024/2025</p>
+            </div>
+            <div id="total-sacks-header" class="bg-blue-600 px-6 py-4 rounded-2xl text-white shadow-lg shadow-blue-100 flex items-center gap-4">
+                <i data-lucide="package" size="32"></i>
+                <div>
+                    <p class="text-xs text-blue-100 font-bold uppercase tracking-widest">Total Geral Acumulado</p>
+                    <p class="text-2xl font-black leading-none"><span id="total-sacks-val">0</span> <span class="text-sm font-normal">sacos</span></p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navegação por Abas -->
+        <nav class="flex gap-8 mb-8 border-b border-slate-200">
+            <button onclick="switchTab('dashboard')" id="btn-dashboard" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-active">
+                <i data-lucide="layout-dashboard" class="inline-block mr-2" size="18"></i>Painel
+            </button>
+            <button onclick="switchTab('harvest')" id="btn-harvest" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
+                <i data-lucide="clipboard-list" class="inline-block mr-2" size="18"></i>Colheita
+            </button>
+            <button onclick="switchTab('deposits')" id="btn-deposits" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
+                <i data-lucide="landmark" class="inline-block mr-2" size="18"></i>Depositários
+            </button>
+        </nav>
+
+        <!-- Seções de Conteúdo -->
+        <main>
+            <!-- DASHBOARD SECTION -->
+            <section id="tab-dashboard" class="space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="dashboard-stats">
+                    <!-- Stats via JS -->
+                </div>
+                <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-8 border-b border-slate-50 flex items-center justify-between">
+                        <h2 class="text-xl font-black text-slate-800 flex items-center gap-2">Performance por Variedade</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
+                                    <th class="px-8 py-5">Fazenda</th>
+                                    <th class="px-8 py-5">Variedade</th>
+                                    <th class="px-8 py-5 text-right">Peso (T)</th>
+                                    <th class="px-8 py-5 text-right">Total Sacos</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashboard-table-body" class="divide-y divide-slate-50">
+                                <!-- Table via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- HARVEST LOG SECTION -->
+            <section id="tab-harvest" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-1">
+                    <form onsubmit="handleFormSubmit(event)" class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 space-y-6 sticky top-8">
+                        <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-4">
+                            <i data-lucide="plus-circle" class="text-blue-600"></i>Novo Registro
+                        </h3>
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</label>
+                                    <input type="date" id="form-date" required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fazenda</label>
+                                    <input type="text" id="form-farm" list="list-farms" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                    <datalist id="list-farms"></datalist>
+                                </div>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Variedade</label>
+                                <input type="text" id="form-variety" list="list-varieties" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                <datalist id="list-varieties"></datalist>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Proprietário</label>
+                                <input type="text" id="form-owner" list="list-owners" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                <datalist id="list-owners"></datalist>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazém</label>
+                                    <input type="text" id="form-warehouse" list="list-warehouses" placeholder="Digitar..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                    <datalist id="list-warehouses"></datalist>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ticket/Ticket</label>
+                                    <input type="text" id="form-ticket" placeholder="Nº..." class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                <div>
+                                    <label class="block text-[8px] font-black text-slate-400 uppercase">Bruto</label>
+                                    <input type="number" id="form-bruto" oninput="calcLiquido()" required class="w-full bg-transparent border-0 p-0 text-sm font-black focus:ring-0">
+                                </div>
+                                <div>
+                                    <label class="block text-[8px] font-black text-slate-400 uppercase">Tara</label>
+                                    <input type="number" id="form-tara" oninput="calcLiquido()" required class="w-full bg-transparent border-0 p-0 text-sm font-black focus:ring-0">
+                                </div>
+                                <div>
+                                    <label class="block text-[8px] font-black text-red-400 uppercase">Desc.</label>
+                                    <input type="number" id="form-desc" oninput="calcLiquido()" value="0" class="w-full bg-transparent border-0 p-0 text-sm font-black text-red-600 focus:ring-0">
+                                </div>
+                            </div>
+                            <div class="bg-blue-600 p-6 rounded-2xl text-white shadow-lg shadow-blue-100">
+                                <label class="block text-[10px] font-black text-blue-200 uppercase tracking-widest">Peso Líquido Final</label>
+                                <div class="text-3xl font-black"><span id="form-liquido">0</span> <span class="text-sm font-normal">kg</span></div>
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-200">
+                            SALVAR REGISTRO
+                        </button>
+                    </form>
+                </div>
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                        <div class="p-6 border-b border-slate-50 flex items-center justify-between">
+                            <h3 class="font-black text-slate-800 flex items-center gap-2"><i data-lucide="history"></i>Últimos Lançamentos</h3>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
+                                        <th class="px-6 py-4">Data</th>
+                                        <th class="px-6 py-4">Origem / Variedade</th>
+                                        <th class="px-6 py-4 text-right">Líquido (kg)</th>
+                                        <th class="px-6 py-4 text-right">Sacos</th>
+                                        <th class="px-6 py-4"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="harvest-table-body" class="divide-y divide-slate-50">
+                                    <!-- Table via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DEPOSITS SECTION -->
+            <section id="tab-deposits" class="hidden space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="deposit-summary">
+                    <!-- Summary via JS -->
+                </div>
+                <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-8 border-b border-slate-50">
+                        <h2 class="text-xl font-black text-slate-800 flex items-center gap-2"><i data-lucide="user-check" class="text-blue-600"></i>Saldos por Conta</h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
+                                    <th class="px-8 py-5">Proprietário</th>
+                                    <th class="px-8 py-5">Armazém</th>
+                                    <th class="px-8 py-5 text-right">Peso (T)</th>
+                                    <th class="px-8 py-5 text-right">Saldo (Sacos)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="deposits-table-body" class="divide-y divide-slate-50">
+                                <!-- Table via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // SERVIÇO DE DADOS (LOCALSTORAGE)
+        const STORAGE_KEY = 'soja_app_single_file_data';
+        let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
+            entries: [],
+            farms: [],
+            varieties: [],
+            warehouses: [],
+            owners: []
+        };
+
+        function saveToDB() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+            renderAll();
+        }
+
+        // FUNÇÕES DE NAVEGAÇÃO
+        function switchTab(tabId) {
+            ['dashboard', 'harvest', 'deposits'].forEach(id => {
+                document.getElementById(`tab-${id}`).classList.toggle('hidden', id !== tabId);
+                document.getElementById(`btn-${id}`).classList.toggle('tab-active', id === tabId);
+                document.getElementById(`btn-${id}`).classList.toggle('tab-inactive', id !== tabId);
+            });
+            renderAll();
+        }
+
+        // LÓGICA DE FORMULÁRIO
+        function calcLiquido() {
+            const bruto = parseFloat(document.getElementById('form-bruto').value) || 0;
+            const tara = parseFloat(document.getElementById('form-tara').value) || 0;
+            const desc = parseFloat(document.getElementById('form-desc').value) || 0;
+            const liquido = bruto - tara - desc;
+            document.getElementById('form-liquido').innerText = liquido.toLocaleString('pt-BR');
+        }
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            const farmName = document.getElementById('form-farm').value.trim();
+            const varietyName = document.getElementById('form-variety').value.trim();
+            const ownerName = document.getElementById('form-owner').value.trim();
+            const warehouseName = document.getElementById('form-warehouse').value.trim();
+            const bruto = parseFloat(document.getElementById('form-bruto').value);
+            const tara = parseFloat(document.getElementById('form-tara').value);
+            const desc = parseFloat(document.getElementById('form-desc').value) || 0;
+            const liquido = bruto - tara - desc;
+
+            const entry = {
+                id: Date.now(),
+                date: document.getElementById('form-date').value,
+                farm: farmName,
+                variety: varietyName,
+                owner: ownerName,
+                warehouse: warehouseName,
+                ticket: document.getElementById('form-ticket').value,
+                bruto, tara, desc, liquido
+            };
+
+            db.entries.push(entry);
+            if (!db.farms.includes(farmName)) db.farms.push(farmName);
+            if (!db.varieties.includes(varietyName)) db.varieties.push(varietyName);
+            if (!db.owners.includes(ownerName)) db.owners.push(ownerName);
+            if (!db.warehouses.includes(warehouseName)) db.warehouses.push(warehouseName);
+
+            saveToDB();
+            e.target.reset();
+            calcLiquido();
+            alert('Registro salvo!');
+        }
+
+        function deleteEntry(id) {
+            if (confirm('Deseja excluir este registro?')) {
+                db.entries = db.entries.filter(e => e.id !== id);
+                saveToDB();
+            }
+        }
+
+        // RENDERIZAÇÃO
+        function renderAll() {
+            renderHarvest();
+            renderDashboard();
+            renderDeposits();
+            renderDatalists();
+            lucide.createIcons();
+        }
+
+        function renderDatalists() {
+            document.getElementById('list-farms').innerHTML = db.farms.map(f => `<option value="${f}">`).join('');
+            document.getElementById('list-varieties').innerHTML = db.varieties.map(v => `<option value="${v}">`).join('');
+            document.getElementById('list-owners').innerHTML = db.owners.map(o => `<option value="${o}">`).join('');
+            document.getElementById('list-warehouses').innerHTML = db.warehouses.map(w => `<option value="${w}">`).join('');
+        }
+
+        function renderHarvest() {
+            const tbody = document.getElementById('harvest-table-body');
+            const totalSacks = db.entries.reduce((acc, curr) => acc + (curr.liquido / 60), 0);
+            document.getElementById('total-sacks-val').innerText = totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+
+            tbody.innerHTML = db.entries.sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => `
+                <tr class="hover:bg-slate-50 transition-all group">
+                    <td class="px-6 py-4 font-bold text-slate-700">${new Date(e.date).toLocaleDateString('pt-BR')}</td>
+                    <td class="px-6 py-4">
+                        <div class="font-black text-slate-800">${e.farm}</div>
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">${e.variety}</div>
+                    </td>
+                    <td class="px-6 py-4 text-right font-black text-slate-900">${e.liquido.toLocaleString('pt-BR')}</td>
+                    <td class="px-6 py-4 text-right">
+                        <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-black">${(e.liquido / 60).toFixed(1)}</span>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="deleteEntry(${e.id})" class="text-slate-300 hover:text-red-500 transition-colors">
+                            <i data-lucide="trash-2" size="16"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('') || '<tr><td colspan="5" class="py-12 text-center text-slate-300">Nenhum registro encontrado</td></tr>';
+        }
+
+        function renderDashboard() {
+            const stats = document.getElementById('dashboard-stats');
+            const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
+            const totalSacks = totalKg / 60;
+            const totalTons = totalKg / 1000;
+            const avgProd = totalSacks / 4346.75; // Área fixa mockada
+
+            stats.innerHTML = `
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4"><i data-lucide="trending-up"></i></div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produção Total</p>
+                    <h4 class="text-2xl font-black text-slate-800">${totalTons.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4>
+                    <p class="text-xs font-bold text-slate-400">${totalKg.toLocaleString('pt-BR')} kg</p>
+                </div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <div class="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center mb-4"><i data-lucide="package"></i></div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Sacos</p>
+                    <h4 class="text-2xl font-black text-slate-800">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</h4>
+                    <p class="text-xs font-bold text-slate-400">Sacos 60kg</p>
+                </div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4"><i data-lucide="target"></i></div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produtividade</p>
+                    <h4 class="text-2xl font-black text-slate-800">${avgProd.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4>
+                    <p class="text-xs font-bold text-slate-400">Sacos / Há</p>
+                </div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4"><i data-lucide="map"></i></div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Área Total</p>
+                    <h4 class="text-2xl font-black text-slate-800">4.346,7</h4>
+                    <p class="text-xs font-bold text-slate-400">Hectares</p>
+                </div>
+            `;
+
+            const tableBody = document.getElementById('dashboard-table-body');
+            const groups = {};
+            db.entries.forEach(e => {
+                const key = `${e.farm}-${e.variety}`;
+                if (!groups[key]) groups[key] = { farm: e.farm, variety: e.variety, kg: 0 };
+                groups[key].kg += e.liquido;
+            });
+
+            tableBody.innerHTML = Object.values(groups).map(g => `
+                <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-8 py-6 font-black text-slate-800">${g.farm}</td>
+                    <td class="px-8 py-6"><span class="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold text-slate-600">${g.variety}</span></td>
+                    <td class="px-8 py-6 text-right font-bold text-slate-600">${(g.kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                    <td class="px-8 py-6 text-right font-black text-slate-900">${(g.kg / 60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhum dado</td></tr>';
+        }
+
+        function renderDeposits() {
+            const summary = document.getElementById('deposit-summary');
+            const totalKg = db.entries.reduce((acc, curr) => acc + curr.liquido, 0);
+            const totalSacks = totalKg / 60;
+
+            summary.innerHTML = `
+                <div class="bg-slate-900 p-8 rounded-[2rem] text-white shadow-2xl shadow-slate-200 md:col-span-2">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Geral em Depósito</p>
+                    <h4 class="text-4xl font-black mt-2">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} <span class="text-lg font-normal text-slate-500">sacos</span></h4>
+                    <div class="mt-4 flex items-center gap-2 text-blue-400 text-sm font-bold">
+                        <i data-lucide="arrow-right-left" size="16"></i> Equivalente a ${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Toneladas
+                    </div>
+                </div>
+                <div class="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-center">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contas Ativas</p>
+                    <h4 class="text-3xl font-black text-slate-800 mt-1">${db.owners.length}</h4>
+                    <p class="text-xs font-bold text-slate-400">Proprietários</p>
+                </div>
+            `;
+
+            const tableBody = document.getElementById('deposits-table-body');
+            const groups = {};
+            db.entries.forEach(e => {
+                const key = `${e.owner}-${e.warehouse}`;
+                if (!groups[key]) groups[key] = { owner: e.owner, warehouse: e.warehouse, kg: 0 };
+                groups[key].kg += e.liquido;
+            });
+
+            tableBody.innerHTML = Object.values(groups).map(g => `
+                <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-8 py-6 font-black text-slate-800 uppercase">${g.owner}</td>
+                    <td class="px-8 py-6 font-bold text-slate-500 flex items-center gap-2"><i data-lucide="warehouse" size="16" class="text-blue-500"></i> ${g.warehouse}</td>
+                    <td class="px-8 py-6 text-right font-bold text-slate-400">${(g.kg / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                    <td class="px-8 py-6 text-right font-black text-slate-900">${(g.kg / 60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Nenhum depósito</td></tr>';
+        }
+
+        // Inicialização
+        document.getElementById('form-date').value = new Date().toISOString().split('T')[0];
+        renderAll();
+    </script>
+</body>
+</html>
