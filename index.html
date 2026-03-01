@@ -234,6 +234,33 @@
             body:has(#print-area:not(.hidden)) main { display: none !important; }
             #print-area:not(.hidden) { display: block !important; visibility: visible !important; }
 
+            /* Se o declaration-print-area estiver visível, oculta o resto */
+            body.printing-declaration #app, 
+            body.printing-declaration #login-screen,
+            body.printing-declaration header, 
+            body.printing-declaration nav { display: none !important; }
+            
+            body.printing-declaration #declaration-print-area { 
+                display: block !important; 
+                visibility: visible !important; 
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                background: white !important;
+                margin: 0 !important;
+                padding: 40px !important;
+                z-index: 9999 !important;
+            }
+
+            .status-pendente { background-color: #f1f5f9; color: #94a3b8; }
+            .status-cambui { background-color: #fef3c7; color: #b45309; }
+            .status-floresta { background-color: #f3e8ff; color: #7e22ce; }
+            .status-bom-jesus { background-color: #e0e7ff; color: #4338ca; }
+            .status-vale { background-color: #dcfce7; color: #15803d; }
+            .status-controladoria { background-color: #dbeafe; color: #1d4ed8; }
+
             table { width: 100% !important; border-collapse: collapse !important; font-size: 10px !important; }
             th, td { border: 1px solid #e2e8f0 !important; padding: 6px !important; }
             
@@ -255,6 +282,55 @@
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
+    <!-- ÁREA DE IMPRESSÃO DA DECLARAÇÃO (ESCONDIDA) -->
+    <div id="declaration-print-area" class="p-10 hidden font-serif text-slate-900 leading-relaxed bg-white">
+        <div class="max-w-4xl mx-auto space-y-8">
+            <!-- Header Logo -->
+            <div class="flex flex-col items-center gap-2 mb-8">
+                <div class="flex items-center gap-2">
+                    <span class="text-6xl font-black text-orange-500 tracking-tighter italic">Cambui</span>
+                </div>
+                <div class="text-xl font-bold uppercase tracking-[0.4em] border-t-2 border-slate-900 pt-1">
+                    Açúcar e Álcool
+                </div>
+            </div>
+
+            <!-- Título -->
+            <div class="text-center">
+                <h1 class="text-3xl font-black uppercase tracking-[0.3em] underline decoration-blue-600 underline-offset-8">D E C L A R A Ç Ã O</h1>
+            </div>
+
+            <!-- Corpo -->
+            <div class="space-y-6 py-4 text-lg">
+                <div class="space-y-1">
+                    <p class="font-bold">De: <span id="decl-print-user">Gutemberg Gomes</span></p>
+                    <p class="font-bold text-sm italic text-blue-800">(Controle Agrícola)</p>
+                </div>
+
+                <p class="text-justify indent-12 leading-loose">
+                    Segue em anexo os Romaneios de Campo Vias <span id="decl-print-status" class="font-black"></span>
+                </p>
+                <p id="decl-print-numbers" class="font-black break-all text-justify leading-relaxed tracking-wider"></p>
+
+                <p class="text-justify indent-12">
+                    Declaro ter recebido conforme descriminado acima os Romaneios e Números.
+                </p>
+            </div>
+
+            <!-- Data e Local -->
+            <div class="text-right pt-16 text-lg">
+                <p>Santa Helena de Goiás, <span id="decl-print-date-full"></span></p>
+            </div>
+
+            <!-- Assinatura -->
+            <div class="pt-20 flex justify-center">
+                <div class="w-80 border-t-2 border-slate-900 pt-2 text-center text-xs font-black uppercase tracking-widest">
+                    Assinatura do Responsável
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- TELA DE LOGIN -->
     <div id="login-screen" class="fixed inset-0 bg-gradient-to-br from-blue-600 to-indigo-900 z-[100] flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-12 text-center space-y-8 animate-in fade-in zoom-in duration-500">
@@ -596,20 +672,22 @@
                                         <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Via Branca (Mim)</p>
                                         <select id="form-via-branca" class="w-full bg-transparent border-0 p-0 text-[10px] font-bold focus:ring-0">
                                             <option value="0">Pendente</option>
-                                            <option value="1">Comigo</option>
-                                            <option value="2">Floresta</option>
-                                            <option value="3">Panorama</option>
-                                            <option value="4">Na Vale</option>
+                                            <option value="1">Usina Cambuí</option>
+                                            <option value="2">Armazem Floresta</option>
+                                            <option value="3">Armazem Bom Jesus</option>
+                                            <option value="4">Usina Vale</option>
+                                            <option value="5">Controladoria</option>
                                         </select>
                                     </div>
                                     <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
                                         <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Via Azul (Vale)</p>
                                         <select id="form-via-azul" class="w-full bg-transparent border-0 p-0 text-[10px] font-bold focus:ring-0">
                                             <option value="0">Pendente</option>
-                                            <option value="1">Comigo</option>
-                                            <option value="2">Floresta</option>
-                                            <option value="3">Panorama</option>
-                                            <option value="4">Na Vale</option>
+                                            <option value="1">Usina Cambuí</option>
+                                            <option value="2">Armazem Floresta</option>
+                                            <option value="3">Armazem Bom Jesus</option>
+                                            <option value="4">Usina Vale</option>
+                                            <option value="5">Controladoria</option>
                                         </select>
                                     </div>
                                 </div>
@@ -699,17 +777,19 @@
                             <div class="flex gap-2">
                                 <select id="quick-via-branca" class="bg-slate-700/50 border-0 rounded-2xl px-4 py-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-blue-500 text-white">
                                     <option value="0">Branca: Pendente</option>
-                                    <option value="1">Branca: Comigo</option>
-                                    <option value="2">Branca: Floresta</option>
-                                    <option value="3">Branca: Panorama</option>
-                                    <option value="4">Branca: Vale</option>
+                                    <option value="1">Branca: Usina Cambuí</option>
+                                    <option value="2">Branca: Armazem Floresta</option>
+                                    <option value="3">Branca: Armazem Bom Jesus</option>
+                                    <option value="4">Branca: Usina Vale</option>
+                                    <option value="5">Branca: Controladoria</option>
                                 </select>
                                 <select id="quick-via-azul" class="bg-slate-700/50 border-0 rounded-2xl px-4 py-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-blue-500 text-white">
                                     <option value="0">Azul: Pendente</option>
-                                    <option value="1" selected>Azul: Comigo</option>
-                                    <option value="2">Azul: Floresta</option>
-                                    <option value="3">Azul: Panorama</option>
-                                    <option value="4">Azul: Vale</option>
+                                    <option value="1" selected>Azul: Usina Cambuí</option>
+                                    <option value="2">Azul: Armazem Floresta</option>
+                                    <option value="3">Azul: Armazem Bom Jesus</option>
+                                    <option value="4">Azul: Usina Vale</option>
+                                    <option value="5">Azul: Controladoria</option>
                                 </select>
                             </div>
                             <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-2xl font-black text-xs transition-all active:scale-95 shadow-lg shadow-blue-900/20">
@@ -751,10 +831,10 @@
                     </div>
                     <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-3">
                         <div class="w-10 h-10 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500">
-                            <i data-lucide="hand" size="18"></i>
+                            <i data-lucide="factory" size="18"></i>
                         </div>
                         <div>
-                            <p class="text-[8px] font-black text-amber-500 uppercase tracking-widest">Comigo</p>
+                            <p class="text-[8px] font-black text-amber-500 uppercase tracking-widest">Usina Cambuí</p>
                             <h4 class="text-lg font-black" id="with-user-vias-count">0</h4>
                         </div>
                     </div>
@@ -763,7 +843,7 @@
                             <i data-lucide="building-2" size="18"></i>
                         </div>
                         <div>
-                            <p class="text-[8px] font-black text-purple-500 uppercase tracking-widest">Floresta</p>
+                            <p class="text-[8px] font-black text-purple-500 uppercase tracking-widest">Armazem Floresta</p>
                             <h4 class="text-lg font-black" id="floresta-vias-count">0</h4>
                         </div>
                     </div>
@@ -772,7 +852,7 @@
                             <i data-lucide="map-pin" size="18"></i>
                         </div>
                         <div>
-                            <p class="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Panorama</p>
+                            <p class="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Armazem Bom Jesus</p>
                             <h4 class="text-lg font-black" id="panorama-vias-count">0</h4>
                         </div>
                     </div>
@@ -781,8 +861,17 @@
                             <i data-lucide="check-circle-2" size="18"></i>
                         </div>
                         <div>
-                            <p class="text-[8px] font-black text-green-500 uppercase tracking-widest">Vale</p>
+                            <p class="text-[8px] font-black text-green-500 uppercase tracking-widest">Usina Vale</p>
                             <h4 class="text-lg font-black" id="at-vale-vias-count">0</h4>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-3">
+                        <div class="w-10 h-10 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
+                            <i data-lucide="shield-check" size="18"></i>
+                        </div>
+                        <div>
+                            <p class="text-[8px] font-black text-blue-600 uppercase tracking-widest">Controladoria</p>
+                            <h4 class="text-lg font-black" id="controladoria-vias-count">0</h4>
                         </div>
                     </div>
                 </div>
@@ -795,7 +884,10 @@
                         </h2>
                         <div class="flex flex-wrap gap-4 print:hidden">
                             <button onclick="window.print()" class="flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
-                                <i data-lucide="printer" size="16"></i> IMPRIMIR
+                                <i data-lucide="printer" size="16"></i> IMPRIMIR TABELA
+                            </button>
+                            <button onclick="prepareDeclaration()" class="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">
+                                <i data-lucide="file-text" size="16"></i> GERAR DECLARAÇÃO
                             </button>
                             <div class="relative min-w-[180px]">
                                 <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size="16"></i>
@@ -803,15 +895,17 @@
                             </div>
                             <select id="filter-rom-status" onchange="renderRomaneios()" class="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-blue-500 text-slate-600">
                                 <option value="all">Todos os Status</option>
-                                <option value="pending">Pendente (Geral)</option>
-                                <option value="with_me">Apenas Comigo</option>
-                                <option value="complete">Apenas Concluídos</option>
+                                <option value="pending">Pendentes</option>
+                                <option value="cambui">Usina Cambuí</option>
+                                <option value="complete">Concluídos</option>
                             </select>
                             <select id="filter-rom-location" onchange="renderRomaneios()" class="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[10px] font-black uppercase focus:ring-2 focus:ring-blue-500 text-slate-600">
                                 <option value="all">Qualquer Localização</option>
-                                <option value="floresta">Na Floresta</option>
-                                <option value="panorama">Na Panorama</option>
-                                <option value="vale">Na Vale</option>
+                                <option value="cambui">Na Usina Cambuí</option>
+                                <option value="floresta">No Armazem Floresta</option>
+                                <option value="panorama">No Armazem Bom Jesus</option>
+                                <option value="vale">Na Usina Vale</option>
+                                <option value="controladoria">Na Controladoria</option>
                             </select>
                         </div>
                     </div>
@@ -1145,20 +1239,20 @@
                         <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Via Branca (Mim)</p>
                         <select id="edit-via-branca" class="w-full bg-white border-0 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500">
                             <option value="0">Pendente</option>
-                            <option value="1">Comigo (Em Mãos)</option>
-                            <option value="2">Na Floresta</option>
-                            <option value="3">Na Panorama</option>
-                            <option value="4">Entregue na Vale</option>
+                            <option value="1">Usina Cambuí</option>
+                            <option value="2">No Armazem Floresta</option>
+                            <option value="3">No Armazem Bom Jesus</option>
+                            <option value="4">Usina Vale</option>
                         </select>
                     </div>
                     <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                         <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Via Azul (Vale)</p>
                         <select id="edit-via-azul" class="w-full bg-white border-0 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500">
                             <option value="0">Pendente</option>
-                            <option value="1">Comigo (Em Mãos)</option>
-                            <option value="2">Na Floresta</option>
-                            <option value="3">Na Panorama</option>
-                            <option value="4">Entregue na Vale</option>
+                            <option value="1">Usina Cambuí</option>
+                            <option value="2">No Armazem Floresta</option>
+                            <option value="3">No Armazem Bom Jesus</option>
+                            <option value="4">Usina Vale</option>
                         </select>
                     </div>
                 </div>
@@ -1168,6 +1262,37 @@
                     <button type="submit" class="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition-all shadow-xl shadow-blue-100">SALVAR ALTERAÇÕES</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- MODAL DE PREPARAÇÃO DA DECLARAÇÃO -->
+    <div id="declaration-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div class="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h3 class="text-2xl font-black text-slate-800 flex items-center gap-3">
+                    <i data-lucide="file-text" class="text-blue-600"></i>Gerar Declaração
+                </h3>
+                <button onclick="closeDeclarationModal()" class="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                    <i data-lucide="x" class="text-slate-500"></i>
+                </button>
+            </div>
+            <div class="p-8 space-y-6">
+                <p class="text-xs text-slate-500 font-bold uppercase tracking-widest">Detalhe o status das vias para o relatório:</p>
+                <div class="space-y-4">
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Ex: Azuis que foram lançados Vias brancas no Armazém Floresta</label>
+                        <input type="text" id="decl-status-desc" placeholder="Descreva o status das vias..." class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+                    </div>
+                    <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                        <p class="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Romaneios Incluídos:</p>
+                        <p id="decl-romaneios-list" class="text-xs font-bold text-blue-700 break-all"></p>
+                    </div>
+                </div>
+                <div class="flex gap-4">
+                    <button type="button" onclick="closeDeclarationModal()" class="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black hover:bg-slate-200 transition-all">CANCELAR</button>
+                    <button onclick="generateDeclarationPrint()" class="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition-all shadow-xl shadow-blue-100">IMPRIMIR DECLARAÇÃO</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1463,7 +1588,7 @@
                         id: Date.now() + Math.random(),
                         date: extractField(line, /(\d{2}\/\d{2}\/\d{4})/) || new Date().toISOString().split('T')[0],
                         farm: detect(line, ['SANTA HELEN', 'LAVA ZOI', 'POUSO DA', 'TRES IRMAS', 'CALIFORNIA', 'SAO JOAO', 'CAMBUI', 'SANTA MARIA', 'NOVA CALIFORNIA', 'PANORAMA', 'MAGNÓLIA', 'BOA ESP', 'SANTA LUZIA', 'LAVA ZOI', 'LAVA Z0I', 'POUSO DA BO']),
-                        warehouse: detect(line, ['AGROMEN', 'COMIGO', 'ARMAZENS', 'COAMO', 'CARGILL', 'BUNGE', 'FLORESTA', 'SANTA HELENA']),
+                        warehouse: detect(line, ['AGROMEN', 'USINA CAMBUI', 'ARMAZENS', 'COAMO', 'CARGILL', 'BUNGE', 'FLORESTA', 'SANTA HELENA', 'ARMAZEM FLORESTA', 'ARMAZEM BOM JESUS']),
                         owner: detect(line, ['SUSANA', 'GUTEMBERG', 'CAMBUI', 'JOAO', 'MARIA']),
                         romaneio: romaneio,
                         variety: detect(line, ['NEO 680', 'IPRO', 'SOJA', 'M7739', 'M6410', 'MONSOY', 'NEOGEN']),
@@ -1851,20 +1976,132 @@
             document.getElementById('edit-owner').value = entry.owner;
             document.getElementById('edit-team').value = entry.team;
             document.getElementById('edit-warehouse').value = entry.warehouse;
-            document.getElementById('edit-ticket').value = entry.ticket || '';
+            document.getElementById('edit-ticket').value = entry.ticket;
             document.getElementById('edit-bruto').value = entry.bruto;
             document.getElementById('edit-tara').value = entry.tara;
-            document.getElementById('edit-desc').value = entry.desc || 0;
-            document.getElementById('edit-via-branca').value = entry.viaBranca || 0;
-            document.getElementById('edit-via-azul').value = entry.viaAzul || 0;
+            document.getElementById('edit-desc').value = entry.desc;
+            
+            const viaBrancaSelect = document.getElementById('edit-via-branca');
+            const viaAzulSelect = document.getElementById('edit-via-azul');
+            
+            // Garante que as opções existam no modal de edição
+            const options = `
+                <option value="0">Pendente</option>
+                <option value="1">Usina Cambuí</option>
+                <option value="2">Armazem Floresta</option>
+                <option value="3">Armazem Bom Jesus</option>
+                <option value="4">Usina Vale</option>
+                <option value="5">Controladoria</option>
+            `;
+            viaBrancaSelect.innerHTML = options;
+            viaAzulSelect.innerHTML = options;
+            
+            viaBrancaSelect.value = entry.viaBranca || 0;
+            viaAzulSelect.value = entry.viaAzul || 0;
             
             calcEditLiquido();
             document.getElementById('edit-modal').classList.remove('hidden');
-            lucide.createIcons();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         }
 
-        function closeEditModal() {
-            document.getElementById('edit-modal').classList.add('hidden');
+        function closeEditModal() { document.getElementById('edit-modal').classList.add('hidden'); }
+
+        // DECLARATION PRINTING
+        let currentDeclarationEntries = [];
+
+        function prepareDeclaration() {
+            const romFilter = removeAccents(document.getElementById('filter-rom-num')?.value || '').toUpperCase();
+            const statusFilter = document.getElementById('filter-rom-status')?.value || 'all';
+            const locationFilter = document.getElementById('filter-rom-location')?.value || 'all';
+
+            currentDeclarationEntries = db.entries.filter(e => {
+                const matchesSearch = !romFilter || 
+                    removeAccents(e.romaneio).toUpperCase().includes(romFilter) || 
+                    removeAccents(e.ticket).toUpperCase().includes(romFilter) ||
+                    removeAccents(e.farm).toUpperCase().includes(romFilter) ||
+                    removeAccents(e.team).toUpperCase().includes(romFilter) ||
+                    removeAccents(e.warehouse || '').toUpperCase().includes(romFilter);
+                
+                let matchesStatus = true;
+                if (statusFilter === 'pending') {
+                    matchesStatus = (e.viaBranca === 0 || e.viaAzul === 0);
+                } else if (statusFilter === 'cambui') {
+                    matchesStatus = (e.viaBranca === 1 && e.viaAzul === 1);
+                } else if (statusFilter === 'complete') {
+                    matchesStatus = (e.viaBranca === 5 && e.viaAzul === 5);
+                }
+
+                let matchesLocation = true;
+                if (locationFilter === 'cambui') {
+                    matchesLocation = (e.viaBranca === 1 && e.viaAzul === 1);
+                } else if (locationFilter === 'floresta') {
+                    matchesLocation = (e.viaBranca === 2 || e.viaAzul === 2);
+                } else if (locationFilter === 'panorama') {
+                    matchesLocation = (e.viaBranca === 3 || e.viaAzul === 3);
+                } else if (locationFilter === 'vale') {
+                    matchesLocation = (e.viaBranca === 4 || e.viaAzul === 4);
+                } else if (locationFilter === 'controladoria') {
+                    matchesLocation = (e.viaBranca === 5 || e.viaAzul === 5);
+                }
+
+                return matchesSearch && matchesStatus && matchesLocation;
+            }).sort((a,b) => a.romaneio.localeCompare(b.romaneio, undefined, {numeric: true}));
+
+            if (currentDeclarationEntries.length === 0) {
+                return alert('Nenhum romaneio filtrado para gerar a declaração.');
+            }
+
+            // Sugere uma descrição baseada nos filtros
+            let suggestedDesc = "";
+            if (statusFilter === 'cambui' || locationFilter === 'cambui') suggestedDesc = "Brancas e Azuis";
+            else if (locationFilter === 'floresta') suggestedDesc = "Azuis que foram lançados Vias brancas no Armazém Floresta";
+            else if (locationFilter === 'panorama') suggestedDesc = "Azuis que foram lançados Vias brancas no Armazém Bom Jesus";
+            else if (locationFilter === 'vale') suggestedDesc = "Azuis que foram lançados Vias brancas na Usina Vale";
+            else if (locationFilter === 'controladoria') suggestedDesc = "Entregues para Controladoria";
+            else suggestedDesc = "da Quinzena passada";
+
+            document.getElementById('decl-status-desc').value = suggestedDesc;
+            document.getElementById('decl-romaneios-list').innerText = currentDeclarationEntries.map(e => e.romaneio).join(' - ');
+            document.getElementById('declaration-modal').classList.remove('hidden');
+        }
+
+        function closeDeclarationModal() { document.getElementById('declaration-modal').classList.add('hidden'); }
+
+        function generateDeclarationPrint() {
+            const statusDesc = document.getElementById('decl-status-desc').value.trim();
+            if (!statusDesc) return alert('Por favor, informe a descrição das vias.');
+
+            const romNumbers = currentDeclarationEntries.map(e => e.romaneio).join(' - ');
+            
+            document.getElementById('decl-print-status').innerText = statusDesc;
+            document.getElementById('decl-print-numbers').innerText = romNumbers;
+            
+            // Nome do usuário logado (se houver)
+            if (window.currentUser) {
+                document.getElementById('decl-print-user').innerText = window.currentUser.displayName || "Gutemberg Gomes";
+            }
+
+            // Data formatada por extenso
+            const today = new Date();
+            const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+            document.getElementById('decl-print-date-full').innerText = `${today.getDate()} de ${months[today.getMonth()]} de ${today.getFullYear()}`;
+
+            // Prepara para impressão
+            const declPrintArea = document.getElementById('declaration-print-area');
+            declPrintArea.classList.remove('hidden');
+            document.body.classList.add('printing-declaration');
+            
+            // Pequeno delay para garantir que o navegador renderizou a mudança de classes antes de abrir a janela de print
+            setTimeout(() => {
+                window.print();
+                
+                // Limpa após fechar a janela de impressão
+                setTimeout(() => {
+                    document.body.classList.remove('printing-declaration');
+                    declPrintArea.classList.add('hidden');
+                    closeDeclarationModal();
+                }, 1000);
+            }, 300);
         }
 
         function calcEditLiquido() {
@@ -1925,10 +2162,11 @@
             const totalSacksFarm = totalKgFarm / 60;
 
             const getStatusLabel = (val) => {
-                if (val === 1) return 'COMIGO';
-                if (val === 2) return 'FLORESTA';
-                if (val === 3) return 'PANORAMA';
-                if (val === 4) return 'NA VALE';
+                if (val === 1) return 'USINA CAMBUÍ';
+                if (val === 2) return 'ARMAZEM FLORESTA';
+                if (val === 3) return 'ARMAZEM BOM JESUS';
+                if (val === 4) return 'USINA VALE';
+                if (val === 5) return 'CONTROLADORIA';
                 return 'PENDENTE';
             };
 
@@ -2160,8 +2398,8 @@
                         <div class="text-[10px] text-blue-600 font-black">ROM: ${e.romaneio}</div>
                         ${e.ticket && e.ticket !== '---' ? `<div class="text-[9px] text-slate-400">Tkt: ${e.ticket}</div>` : ''}
                         <div class="flex gap-1 mt-1">
-                            <span class="w-2 h-2 rounded-full ${e.viaBranca === 4 ? 'bg-green-500' : (e.viaBranca === 1 ? 'bg-amber-400' : (e.viaBranca === 2 ? 'bg-purple-400' : (e.viaBranca === 3 ? 'bg-indigo-400' : 'bg-slate-200')))}" title="Via Branca: ${e.viaBranca === 4 ? 'Na Vale' : (e.viaBranca === 1 ? 'Comigo' : (e.viaBranca === 2 ? 'Floresta' : (e.viaBranca === 3 ? 'Panorama' : 'Pendente')))}"></span>
-                            <span class="w-2 h-2 rounded-full ${e.viaAzul === 4 ? 'bg-blue-500' : (e.viaAzul === 1 ? 'bg-amber-400' : (e.viaAzul === 2 ? 'bg-purple-400' : (e.viaAzul === 3 ? 'bg-indigo-400' : 'bg-slate-200')))}" title="Via Azul: ${e.viaAzul === 4 ? 'Na Vale' : (e.viaAzul === 1 ? 'Comigo' : (e.viaAzul === 2 ? 'Floresta' : (e.viaAzul === 3 ? 'Panorama' : 'Pendente')))}"></span>
+                            <span class="w-2 h-2 rounded-full ${e.viaBranca === 4 ? 'bg-green-500' : (e.viaBranca === 1 ? 'bg-amber-400' : (e.viaBranca === 2 ? 'bg-purple-400' : (e.viaBranca === 3 ? 'bg-indigo-400' : 'bg-slate-200')))}" title="Via Branca: ${e.viaBranca === 4 ? 'Usina Vale' : (e.viaBranca === 1 ? 'Usina Cambuí' : (e.viaBranca === 2 ? 'Armazem Floresta' : (e.viaBranca === 3 ? 'Armazem Bom Jesus' : 'Pendente')))}"></span>
+                            <span class="w-2 h-2 rounded-full ${e.viaAzul === 4 ? 'bg-blue-500' : (e.viaAzul === 1 ? 'bg-amber-400' : (e.viaAzul === 2 ? 'bg-purple-400' : (e.viaAzul === 3 ? 'bg-indigo-400' : 'bg-slate-200')))}" title="Via Azul: ${e.viaAzul === 4 ? 'Usina Vale' : (e.viaAzul === 1 ? 'Usina Cambuí' : (e.viaAzul === 2 ? 'Armazem Floresta' : (e.viaAzul === 3 ? 'Armazem Bom Jesus' : 'Pendente')))}"></span>
                         </div>
                     </td>
                     <td class="px-6 py-4">
@@ -2211,14 +2449,26 @@
                     removeAccents(e.warehouse || '').toUpperCase().includes(romFilter);
                 
                 let matchesStatus = true;
-                if (statusFilter === 'pending') matchesStatus = e.viaBranca === 0 || e.viaAzul === 0;
-                if (statusFilter === 'with_me') matchesStatus = e.viaBranca === 1 || e.viaAzul === 1;
-                if (statusFilter === 'complete') matchesStatus = e.viaBranca === 4 && e.viaAzul === 4;
+                if (statusFilter === 'pending') {
+                    matchesStatus = (e.viaBranca === 0 || e.viaAzul === 0);
+                } else if (statusFilter === 'cambui') {
+                    matchesStatus = (e.viaBranca === 1 && e.viaAzul === 1);
+                } else if (statusFilter === 'complete') {
+                    matchesStatus = (e.viaBranca === 5 && e.viaAzul === 5);
+                }
 
                 let matchesLocation = true;
-                if (locationFilter === 'floresta') matchesLocation = e.viaBranca === 2 || e.viaAzul === 2;
-                if (locationFilter === 'panorama') matchesLocation = e.viaBranca === 3 || e.viaAzul === 3;
-                if (locationFilter === 'vale') matchesLocation = e.viaBranca === 4 || e.viaAzul === 4;
+                if (locationFilter === 'cambui') {
+                    matchesLocation = (e.viaBranca === 1 && e.viaAzul === 1);
+                } else if (locationFilter === 'floresta') {
+                    matchesLocation = (e.viaBranca === 2 || e.viaAzul === 2);
+                } else if (locationFilter === 'panorama') {
+                    matchesLocation = (e.viaBranca === 3 || e.viaAzul === 3);
+                } else if (locationFilter === 'vale') {
+                    matchesLocation = (e.viaBranca === 4 || e.viaAzul === 4);
+                } else if (locationFilter === 'controladoria') {
+                    matchesLocation = (e.viaBranca === 5 || e.viaAzul === 5);
+                }
 
                 return matchesSearch && matchesStatus && matchesLocation;
             });
@@ -2226,31 +2476,38 @@
             // Stats e Relatório Inteligente
             document.getElementById('total-romaneios-count').innerText = db.entries.length;
             
-            // Contagem por estado: 0: Pendente, 1: Comigo, 2: Floresta, 3: Panorama, 4: Vale
-            const countVias = (state) => db.entries.reduce((acc, e) => acc + (e.viaBranca === state ? 1 : 0) + (e.viaAzul === state ? 1 : 0), 0);
-            
+            // Contagem por estado: 0: Pendente, 1: Usina Cambuí, 2: Armazem Floresta, 3: Armazem Bom Jesus, 4: Usina Vale, 5: Controladoria
+            const getDetailedStats = (state) => db.entries.reduce((acc, e) => {
+                if (e.viaBranca === state) acc.branca++;
+                if (e.viaAzul === state) acc.azul++;
+                return acc;
+            }, { branca: 0, azul: 0 });
+
             const stats = {
-                pending: countVias(0),
-                withMe: countVias(1),
-                floresta: countVias(2),
-                panorama: countVias(3),
-                vale: countVias(4)
+                pending: getDetailedStats(0),
+                cambui: getDetailedStats(1),
+                floresta: getDetailedStats(2),
+                panorama: getDetailedStats(3),
+                vale: getDetailedStats(4),
+                controladoria: getDetailedStats(5)
             };
 
-            document.getElementById('pending-vias-count').innerText = stats.pending;
-            document.getElementById('with-user-vias-count').innerText = stats.withMe;
-            document.getElementById('floresta-vias-count').innerText = stats.floresta;
-            document.getElementById('panorama-vias-count').innerText = stats.panorama;
-            document.getElementById('at-vale-vias-count').innerText = stats.vale;
+            document.getElementById('pending-vias-count').innerText = stats.pending.branca + stats.pending.azul;
+            document.getElementById('with-user-vias-count').innerText = stats.cambui.branca + stats.cambui.azul;
+            document.getElementById('floresta-vias-count').innerText = stats.floresta.branca + stats.floresta.azul;
+            document.getElementById('panorama-vias-count').innerText = stats.panorama.branca + stats.panorama.azul;
+            document.getElementById('at-vale-vias-count').innerText = stats.vale.branca + stats.vale.azul;
+            document.getElementById('controladoria-vias-count').innerText = stats.controladoria.branca + stats.controladoria.azul;
 
             // Renderiza Relatório Inteligente (cards)
             const smartReport = document.getElementById('smart-vias-report');
             const locations = [
-                { id: 'pending', label: 'Pendentes', count: stats.pending, color: 'red', icon: 'alert-circle' },
-                { id: 'withMe', label: 'Comigo', count: stats.withMe, color: 'amber', icon: 'hand' },
-                { id: 'floresta', label: 'Floresta', count: stats.floresta, color: 'purple', icon: 'building-2' },
-                { id: 'panorama', label: 'Panorama', count: stats.panorama, color: 'indigo', icon: 'map-pin' },
-                { id: 'vale', label: 'Na Vale', count: stats.vale, color: 'green', icon: 'check-circle-2' }
+                { id: 'pending', label: 'Pendentes', data: stats.pending, color: 'red', icon: 'alert-circle' },
+                { id: 'cambui', label: 'Usina Cambuí', data: stats.cambui, color: 'amber', icon: 'factory' },
+                { id: 'floresta', label: 'Armazem Floresta', data: stats.floresta, color: 'purple', icon: 'building-2' },
+                { id: 'panorama', label: 'Armazem Bom Jesus', data: stats.panorama, color: 'indigo', icon: 'map-pin' },
+                { id: 'vale', label: 'Usina Vale', data: stats.vale, color: 'green', icon: 'check-circle-2' },
+                { id: 'controladoria', label: 'Controladoria', data: stats.controladoria, color: 'blue', icon: 'shield-check' }
             ];
 
             smartReport.innerHTML = locations.map(loc => `
@@ -2258,19 +2515,26 @@
                     <div class="w-8 h-8 rounded-full bg-${loc.color}-100 text-${loc.color}-600 flex items-center justify-center mb-2">
                         <i data-lucide="${loc.icon}" size="14"></i>
                     </div>
-                    <p class="text-[8px] font-black text-${loc.color}-400 uppercase tracking-widest">${loc.label}</p>
-                    <h5 class="text-xl font-black text-${loc.color}-700">${loc.count} <span class="text-[10px] font-medium">vias</span></h5>
+                    <p class="text-[8px] font-black text-${loc.color}-400 uppercase tracking-widest mb-1">${loc.label}</p>
+                    <div class="flex flex-col items-center">
+                        <h5 class="text-xl font-black text-${loc.color}-700 leading-tight">${loc.data.branca + loc.data.azul} <span class="text-[9px] font-medium uppercase">vias</span></h5>
+                        <div class="flex gap-2 mt-1 text-[8px] font-black uppercase tracking-tighter text-slate-500">
+                            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> B: ${loc.data.branca}</span>
+                            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> A: ${loc.data.azul}</span>
+                        </div>
+                    </div>
                 </div>
             `).join('');
 
             // Resumo para Impressão Romaneios
             const printSummary = `
-                <div class="hidden print:grid grid-cols-5 gap-2 mb-6 border-2 border-slate-100 p-4 rounded-xl text-center">
-                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Pendentes</p><p class="text-xs font-black">${stats.pending}</p></div>
-                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Comigo</p><p class="text-xs font-black">${stats.withMe}</p></div>
-                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Floresta</p><p class="text-xs font-black">${stats.floresta}</p></div>
-                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Panorama</p><p class="text-xs font-black">${stats.panorama}</p></div>
-                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Na Vale</p><p class="text-xs font-black text-green-600">${stats.vale}</p></div>
+                <div class="hidden print:grid grid-cols-6 gap-2 mb-6 border-2 border-slate-100 p-4 rounded-xl text-center">
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Pendentes</p><p class="text-xs font-black">${stats.pending.branca + stats.pending.azul}</p></div>
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Cambuí</p><p class="text-xs font-black">${stats.cambui.branca + stats.cambui.azul}</p></div>
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Floresta</p><p class="text-xs font-black">${stats.floresta.branca + stats.floresta.azul}</p></div>
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Bom Jesus</p><p class="text-xs font-black">${stats.panorama.branca + stats.panorama.azul}</p></div>
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Vale</p><p class="text-xs font-black">${stats.vale.branca + stats.vale.azul}</p></div>
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Controladoria</p><p class="text-xs font-black text-blue-600">${stats.controladoria.branca + stats.controladoria.azul}</p></div>
                 </div>
             `;
             document.getElementById('romaneios-print-summary').innerHTML = printSummary;
@@ -2282,21 +2546,25 @@
                     let icon = 'circle';
                     
                     if (value === 1) {
-                        label = 'Comigo';
+                        label = 'Usina Cambuí';
                         colorClass = 'bg-amber-100 text-amber-700 hover:bg-purple-50';
-                        icon = 'hand';
+                        icon = 'factory';
                     } else if (value === 2) {
-                        label = 'Floresta';
+                        label = 'Armazem Floresta';
                         colorClass = 'bg-purple-100 text-purple-700 hover:bg-indigo-50';
                         icon = 'building-2';
                     } else if (value === 3) {
-                        label = 'Panorama';
+                        label = 'Armazem Bom Jesus';
                         colorClass = 'bg-indigo-100 text-indigo-700 hover:bg-green-50';
                         icon = 'map-pin';
                     } else if (value === 4) {
-                        label = 'Na Vale';
-                        colorClass = type === 'viaBranca' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700';
+                        label = 'Usina Vale';
+                        colorClass = 'bg-green-100 text-green-700 hover:bg-blue-50';
                         icon = 'check-circle-2';
+                    } else if (value === 5) {
+                        label = 'Controladoria';
+                        colorClass = 'bg-blue-100 text-blue-700';
+                        icon = 'shield-check';
                     }
                     
                     return `
@@ -2307,7 +2575,7 @@
                     `;
                 };
 
-                const isComplete = e.viaBranca === 4 && e.viaAzul === 4;
+                const isComplete = e.viaBranca === 5 && e.viaAzul === 5;
                 
                 return `
                     <tr class="hover:bg-slate-50 transition-colors" id="rom-row-${e.id}">
@@ -2349,9 +2617,9 @@
             if (!window.currentUserIsAdmin) return alert('Acesso negado: Apenas o administrador pode realizar esta ação.');
             const entry = db.entries.find(e => e.id === id);
             if (entry) {
-                // Ciclo: 0 (Pendente) -> 1 (Comigo) -> 2 (Floresta) -> 3 (Panorama) -> 4 (Vale) -> 0
+                // Ciclo: 0 (Pendente) -> 1 (Usina Cambuí) -> 2 (Armazem Floresta) -> 3 (Armazem Bom Jesus) -> 4 (Usina Vale) -> 5 (Controladoria) -> 0
                 let current = entry[type] || 0;
-                entry[type] = (current + 1) % 5;
+                entry[type] = (current + 1) % 6;
                 
                 if (window.saveEntryToFirebase) window.saveEntryToFirebase(entry);
                 saveToDB();
