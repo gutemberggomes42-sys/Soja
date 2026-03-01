@@ -94,6 +94,9 @@
                 
                 // Inicializa Listeners para Sincronização em Tempo Real
                 setupRealtimeSync();
+                
+                // Limpa duplicados residuais
+                cleanupDuplicates();
             } else {
                 loginScreen.classList.remove('hidden');
                 appContent.classList.add('hidden');
@@ -103,17 +106,20 @@
 
         async function setupRealtimeSync() {
             // Sincroniza Entradas de Colheita
-            onSnapshot(collection(firestore, "harvest_entries"), (snapshot) => {
+            onSnapshot(collection(firestore, "harvest_entries"), async (snapshot) => {
                 const cloudEntries = [];
                 snapshot.forEach(doc => cloudEntries.push(doc.data()));
                 
                 if (window.db) {
                     // Merge inteligente: mantém o que já existe e adiciona/atualiza
                     const merged = mergeArrays(window.db.entries, cloudEntries);
-                    if (JSON.stringify(window.db.entries) !== JSON.stringify(merged)) {
-                        window.db.entries = merged;
-                        updateLocalAndRender();
-                    }
+                    
+                    // Sempre atualiza o banco local com o que veio da nuvem
+                    window.db.entries = merged;
+                    updateLocalAndRender();
+                    
+                    // Limpeza automática de duplicados residuais (sempre que sincronizar)
+                    if (window.currentUserIsAdmin) await cleanupDuplicates();
                 }
             });
 
@@ -211,12 +217,41 @@
         .tab-inactive { color: #64748b; }
         .tab-inactive:hover { color: #334155; }
         @media print {
-            body * { visibility: hidden; }
-            #print-area, #print-area *, #tab-reports, #tab-reports * { visibility: visible; }
-            #print-area { position: absolute; left: 0; top: 0; width: 100%; }
-            #tab-reports { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
-            button, nav, header, #import-loader { display: none !important; }
+            body { background: white; padding: 0; }
+            .print\:hidden { display: none !important; }
+            #app { max-width: 100%; padding: 0; margin: 0; box-shadow: none; }
+            header, nav, .admin-only, button, .shadow-xl, .rounded-\[2\.5rem\], #import-loader { display: none !important; }
+            
+            #tab-reports, #tab-romaneios, #tab-harvest, #tab-dashboard, #tab-deposits, #tab-farms { 
+                position: static !important; width: 100% !important; height: auto !important; 
+            }
+            
+            /* Lógica para imprimir apenas a aba ativa ou o comprovante individual */
+            main section:not(.active-tab) { display: none !important; }
+            main section.active-tab { display: block !important; }
+            
+            /* Se o print-area estiver visível (printEntry), oculta o resto do main */
+            body:has(#print-area:not(.hidden)) main { display: none !important; }
+            #print-area:not(.hidden) { display: block !important; visibility: visible !important; }
+
+            table { width: 100% !important; border-collapse: collapse !important; font-size: 10px !important; }
+            th, td { border: 1px solid #e2e8f0 !important; padding: 6px !important; }
+            
+            /* Logo Ggomes Log para Impressão */
+            .print-header { 
+                display: flex !important; 
+                justify-content: space-between; 
+                align-items: center; 
+                margin-bottom: 30px; 
+                padding-bottom: 15px; 
+                border-bottom: 3px solid #1e293b;
+            }
+            .print-logo-text { font-size: 28px !important; font-weight: 900 !important; color: #1e293b; letter-spacing: -1px; }
+            .print-subtitle { font-size: 10px !important; font-weight: 700 !important; color: #64748b; text-transform: uppercase; letter-spacing: 2px; }
         }
+        
+        /* Estilo para o cabeçalho de impressão (oculto na tela) */
+        .print-header { display: none; }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
@@ -250,6 +285,133 @@
     </div>
 
     <div id="app" class="max-w-7xl mx-auto px-4 py-8 hidden">
+        <!-- ÁREA DE IMPRESSÃO (Oculta na tela) -->
+        <div id="print-area" class="hidden">
+            <div class="print-header">
+                <div>
+                    <h1 class="print-logo-text">Ggomes Log</h1>
+                    <p class="print-subtitle">Logística e Gestão de Safra • 2025/2026</p>
+                </div>
+                <div style="text-align: right;">
+                    <p style="font-size: 12px; font-weight: 900; color: #1e293b;">COMPROVANTE DE CARGA DETALHADO</p>
+                    <p id="print-now" style="font-size: 9px; color: #64748b;"></p>
+                </div>
+            </div>
+
+            <!-- Grid de Informações Principais -->
+            <div style="grid-template-columns: repeat(3, 1fr); display: grid; gap: 15px; margin-bottom: 25px; border: 1px solid #e2e8f0; padding: 20px; border-radius: 15px; background: #f8fafc;">
+                <div>
+                    <p style="font-size: 7px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Fazenda</p>
+                    <p id="print-farm" style="font-size: 12px; font-weight: 900; color: #1e293b; text-transform: uppercase;"></p>
+                </div>
+                <div>
+                    <p style="font-size: 7px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Produtor</p>
+                    <p id="print-producer" style="font-size: 12px; font-weight: 900; color: #1e293b; text-transform: uppercase;"></p>
+                </div>
+                <div style="text-align: right;">
+                    <p style="font-size: 7px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Data</p>
+                    <p id="print-date-val" style="font-size: 12px; font-weight: 900; color: #1e293b;"></p>
+                </div>
+                <div>
+                    <p style="font-size: 7px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Romaneio</p>
+                    <p id="print-romaneio" style="font-size: 12px; font-weight: 900; color: #2563eb;"></p>
+                </div>
+                <div>
+                    <p style="font-size: 7px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Ticket</p>
+                    <p id="print-ticket" style="font-size: 12px; font-weight: 900; color: #1e293b;"></p>
+                </div>
+                <div style="text-align: right;">
+                    <p style="font-size: 7px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px;">Equipe</p>
+                    <p id="print-team" style="font-size: 12px; font-weight: 900; color: #1e293b; text-transform: uppercase;"></p>
+                </div>
+            </div>
+
+            <!-- Tabela de Pesos e Variedade -->
+            <div style="margin-bottom: 25px;">
+                <table style="width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0;">
+                    <thead>
+                        <tr style="background: #1e293b;">
+                            <th style="padding: 10px; text-align: left; font-size: 8px; text-transform: uppercase; color: #ffffff; border: 1px solid #1e293b;">Especificação Técnica</th>
+                            <th style="padding: 10px; text-align: right; font-size: 8px; text-transform: uppercase; color: #ffffff; border: 1px solid #1e293b;">Dados / Pesagem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #e2e8f0; font-size: 9px; font-weight: 600;">Variedade de Soja</td>
+                            <td id="print-variety" style="padding: 8px; border: 1px solid #e2e8f0; font-size: 10px; text-align: right; font-weight: 800; text-transform: uppercase;"></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #e2e8f0; font-size: 9px; font-weight: 600;">Depositário / Armazém</td>
+                            <td id="print-owner-loc" style="padding: 8px; border: 1px solid #e2e8f0; font-size: 10px; text-align: right; font-weight: 800;"></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #e2e8f0; font-size: 9px; font-weight: 600; color: #64748b;">Peso Bruto Entrada</td>
+                            <td id="print-bruto" style="padding: 8px; border: 1px solid #e2e8f0; font-size: 10px; text-align: right; color: #64748b;"></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #e2e8f0; font-size: 9px; font-weight: 600; color: #64748b;">Peso Tara Veículo</td>
+                            <td id="print-tara" style="padding: 8px; border: 1px solid #e2e8f0; font-size: 10px; text-align: right; color: #64748b;"></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #e2e8f0; font-size: 9px; font-weight: 600; color: #ef4444;">Descontos (Impureza/Umidade)</td>
+                            <td id="print-desc" style="padding: 8px; border: 1px solid #e2e8f0; font-size: 10px; text-align: right; color: #ef4444; font-weight: 700;"></td>
+                        </tr>
+                        <tr style="background: #eff6ff;">
+                            <td style="padding: 10px; border: 1px solid #3b82f6; font-size: 11px; font-weight: 900; color: #1e3a8a;">PESO LÍQUIDO (KG)</td>
+                            <td id="print-liquido" style="padding: 10px; border: 1px solid #3b82f6; font-size: 14px; text-align: right; font-weight: 900; color: #1e3a8a;"></td>
+                        </tr>
+                        <tr style="background: #2563eb;">
+                            <td style="padding: 10px; border: 1px solid #2563eb; font-size: 11px; font-weight: 900; color: #ffffff;">TOTAL EM SACOS (60KG)</td>
+                            <td id="print-sacks" style="padding: 10px; border: 1px solid #2563eb; font-size: 16px; text-align: right; font-weight: 900; color: #ffffff;"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Resumo do Status das Vias -->
+            <div style="grid-template-columns: repeat(2, 1fr); display: grid; gap: 15px; margin-bottom: 25px;">
+                <div style="border: 1px solid #e2e8f0; padding: 12px; border-radius: 10px;">
+                    <p style="font-size: 7px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Status Via Branca</p>
+                    <p id="print-via-branca" style="font-size: 9px; font-weight: 800; color: #1e293b;"></p>
+                </div>
+                <div style="border: 1px solid #e2e8f0; padding: 12px; border-radius: 10px;">
+                    <p style="font-size: 7px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Status Via Azul</p>
+                    <p id="print-via-azul" style="font-size: 9px; font-weight: 800; color: #1e293b;"></p>
+                </div>
+            </div>
+
+            <!-- Resumo Acumulado da Fazenda -->
+            <div style="border: 2px solid #f1f5f9; padding: 15px; border-radius: 15px; margin-bottom: 30px;">
+                <h4 style="font-size: 8px; font-weight: 900; color: #64748b; text-transform: uppercase; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9; padding-bottom: 5px;">Acompanhamento Acumulado da Origem</h4>
+                <div style="grid-template-columns: repeat(2, 1fr); display: grid; gap: 20px;">
+                    <div>
+                        <p style="font-size: 7px; color: #94a3b8; text-transform: uppercase;">Total de Cargas da Fazenda</p>
+                        <p id="print-farm-total-loads" style="font-size: 12px; font-weight: 900; color: #1e293b;"></p>
+                    </div>
+                    <div style="text-align: right;">
+                        <p style="font-size: 7px; color: #94a3b8; text-transform: uppercase;">Total Acumulado (Sacos)</p>
+                        <p id="print-farm-total-sacks" style="font-size: 12px; font-weight: 900; color: #16a34a;"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Observações -->
+            <div id="print-obs-section" style="margin-bottom: 40px; border-left: 3px solid #cbd5e1; padding-left: 15px;">
+                <p style="font-size: 7px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Observações Adicionais</p>
+                <p id="print-obs" style="font-size: 9px; color: #475569; font-style: italic;"></p>
+            </div>
+
+            <!-- Assinatura -->
+            <div style="margin-top: 80px; display: flex; justify-content: space-between; gap: 50px;">
+                <div style="flex: 1; border-top: 1px solid #cbd5e1; text-align: center; padding-top: 8px;">
+                    <p style="font-size: 7px; color: #94a3b8; text-transform: uppercase;">Assinatura do Conferente</p>
+                </div>
+                <div style="flex: 1; border-top: 1px solid #cbd5e1; text-align: center; padding-top: 8px;">
+                    <p style="font-size: 7px; color: #94a3b8; text-transform: uppercase;">Assinatura do Motorista</p>
+                </div>
+            </div>
+        </div>
+
         <!-- Header -->
         <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
             <div class="flex items-center gap-4">
@@ -296,6 +458,18 @@
         </nav>
 
         <main>
+            <!-- Cabeçalho de Impressão Global -->
+            <div class="print-header">
+                <div>
+                    <h1 class="print-logo-text">Ggomes Log</h1>
+                    <p class="print-subtitle">Gestão de Safra • Soja 2025/2026</p>
+                </div>
+                <div style="text-align: right;">
+                    <p style="font-size: 10px; font-weight: 800; color: #1e293b;">Relatório Gerencial</p>
+                    <p id="print-date" style="font-size: 9px; color: #64748b;"></p>
+                </div>
+            </div>
+
             <!-- DASHBOARD -->
             <section id="tab-dashboard" class="space-y-8">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="dashboard-stats"></div>
@@ -304,6 +478,7 @@
                         <h2 class="text-xl font-black text-slate-800 flex items-center gap-2">Performance por Variedade</h2>
                     </div>
                     <div class="overflow-x-auto">
+                        <div id="romaneios-print-summary"></div>
                         <table class="w-full text-left">
                             <thead>
                                 <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
@@ -492,7 +667,8 @@
                         </div>
                     </div>
                         <div class="overflow-x-auto">
-                            <table class="w-full text-left text-sm">
+                        <div id="harvest-print-summary"></div>
+                        <table class="w-full text-left text-sm">
                                 <thead>
                                     <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
                                         <th class="px-6 py-4">Data / Romaneio</th>
@@ -1088,13 +1264,89 @@
         // Helper para extrair partes de um romaneio (ex: "16051 / 16052" -> ["16051", "16052"])
         const extractRomaneioParts = (str) => {
             if (!str) return [];
-            return str.split(/[\/\s\-\,]+/).map(s => s.trim()).filter(s => s.length > 0);
+            // Remove qualquer caractere que não seja número ou letra, exceto separadores comuns
+            // e então quebra em partes. Converte tudo para string e limpa espaços.
+            return String(str)
+                .toUpperCase()
+                .split(/[\/\s\-\,]+/)
+                .map(s => {
+                    let clean = s.trim();
+                    // Se for apenas números, remove zeros à esquerda para garantir match (ex: 016005 -> 16005)
+                    if (/^\d+$/.test(clean)) return String(Number(clean));
+                    return clean;
+                })
+                .filter(s => s.length > 0);
         };
+
+        async function cleanupDuplicates() {
+            if (!db.entries || db.entries.length < 2 || !window.currentUserIsAdmin) return;
+            
+            const uniqueEntries = [];
+            const romMap = new Map(); // romPart -> entryIndex
+            const toDeleteFromFirebase = [];
+
+            // Ordena por completude (tem fazenda primeiro) e depois por data (mais recente)
+            const sorted = [...db.entries].sort((a, b) => {
+                const aFull = (a.farm !== '---' && a.farm) ? 1 : 0;
+                const bFull = (b.farm !== '---' && b.farm) ? 1 : 0;
+                if (aFull !== bFull) return bFull - aFull;
+                return new Date(b.date) - new Date(a.date);
+            });
+
+            sorted.forEach(entry => {
+                const parts = extractRomaneioParts(entry.romaneio);
+                let existingIdx = -1;
+                
+                for (const p of parts) {
+                    if (romMap.has(p)) {
+                        existingIdx = romMap.get(p);
+                        break;
+                    }
+                }
+
+                if (existingIdx === -1) {
+                    uniqueEntries.push(entry);
+                    const newIdx = uniqueEntries.length - 1;
+                    parts.forEach(p => romMap.set(p, newIdx));
+                } else {
+                    // Duplicado encontrado!
+                    const existing = uniqueEntries[existingIdx];
+                    
+                    // Se o duplicado atual (entry) for MAIS completo que o que já guardamos (existing)
+                    // Ou se as datas forem diferentes e o entry for o "real" (que veio de import)
+                    // (Mas já ordenamos, então o 'existing' tende a ser o melhor)
+                    
+                    // Mescla status das vias
+                    const oldVBranca = existing.viaBranca || 0;
+                    const oldVAzul = existing.viaAzul || 0;
+                    existing.viaBranca = Math.max(oldVBranca, entry.viaBranca || 0);
+                    existing.viaAzul = Math.max(oldVAzul, entry.viaAzul || 0);
+
+                    // Se houve mudança no status das vias, marca para salvar o 'existing'
+                    if (existing.viaBranca !== oldVBranca || existing.viaAzul !== oldVAzul) {
+                        if (window.saveEntryToFirebase) window.saveEntryToFirebase(existing);
+                    }
+
+                    // Adiciona o ID do duplicado para deletar do Firebase
+                    if (entry.id !== existing.id) {
+                        toDeleteFromFirebase.push(entry.id);
+                    }
+                }
+            });
+
+            if (toDeleteFromFirebase.length > 0) {
+                console.log(`Cleanup: Removendo ${toDeleteFromFirebase.length} duplicados do banco...`);
+                for (const id of toDeleteFromFirebase) {
+                    if (window.deleteEntryFromFirebase) await window.deleteEntryFromFirebase(id);
+                }
+                db.entries = uniqueEntries;
+                saveToDB();
+            }
+        }
 
         function saveToDB() { 
             localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); 
             renderAll(); 
-            // A sincronização granular é tratada individualmente nas funções de ação (Submit/Delete)
         }
 
         // IMPORTAÇÃO (EXCEL OU IMAGEM)
@@ -1351,65 +1603,87 @@
 
         function saveBulkEntries() {
             if (!window.currentUserIsAdmin) return alert('Acesso negado: Apenas o administrador pode realizar esta ação.');
-            // Filtra duplicados antes de salvar
-            const newEntries = importPreviewData.filter(e => {
-                const parts = extractRomaneioParts(e.romaneio);
-                const exists = db.entries.some(entry => {
-                    const entryParts = extractRomaneioParts(entry.romaneio);
-                    // Só considera duplicado se o registro existente já tiver dados de colheita (farm !== '---')
-                    return entry.farm !== '---' && parts.some(p => entryParts.includes(p));
-                });
-                return !exists;
-            });
+            
+            let addedCount = 0;
+            let updatedCount = 0;
+            let skippedCount = 0;
 
-            const dupeCount = importPreviewData.length - newEntries.length;
-
-            if (newEntries.length === 0) {
-                alert(`Todos os ${importPreviewData.length} registros já estão cadastrados no sistema.`);
-                clearImportPreview();
-                return;
-            }
-
-            if (confirm(`Salvar ${newEntries.length} novos registros? ${dupeCount > 0 ? `(${dupeCount} duplicados serão ignorados)` : ''}`)) {
-                newEntries.forEach(e => {
-                    // Verifica se existe um placeholder (Registro Rápido) para preencher
+            if (confirm(`Deseja salvar os ${importPreviewData.length} registros da pré-visualização?`)) {
+                importPreviewData.forEach(e => {
                     const parts = extractRomaneioParts(e.romaneio);
-                    const placeholderIdx = db.entries.findIndex(entry => {
+                    
+                    // Find any existing entry (real or placeholder) by romaneio parts
+                    const existingIdx = db.entries.findIndex(entry => {
                         const entryParts = extractRomaneioParts(entry.romaneio);
-                        return entry.farm === '---' && parts.some(p => entryParts.includes(p));
+                        return parts.some(p => entryParts.includes(p));
                     });
 
-                    if (placeholderIdx !== -1) {
-                        const current = db.entries[placeholderIdx];
-                        db.entries[placeholderIdx] = {
-                            ...current,
-                            ...e,
-                            viaBranca: Math.max(current.viaBranca || 0, e.viaBranca || 0),
-                            viaAzul: Math.max(current.viaAzul || 0, e.viaAzul || 0)
+                    if (existingIdx !== -1) {
+                        // An existing entry was found, so we update it
+                        const currentEntry = db.entries[existingIdx];
+                        
+                        // Update existing entry with new data from import
+                        // The imported entry 'e' should overwrite fields, including 'date'
+                        // IMPORTANT: We must NOT overwrite the original 'id'
+                        const { id, ...importData } = e;
+                        const updatedEntry = {
+                            ...currentEntry, // Preserve original ID and any fields not in 'e'
+                            ...importData,   // Overwrite with imported data (including date)
+                            // Ensure vias are maxed out, not overwritten if existing is higher
+                            viaBranca: Math.max(currentEntry.viaBranca || 0, e.viaBranca || 0),
+                            viaAzul: Math.max(currentEntry.viaAzul || 0, e.viaAzul || 0)
                         };
-                        if (window.saveEntryToFirebase) window.saveEntryToFirebase(db.entries[placeholderIdx]);
+
+                        // Only update if there's a meaningful change (to avoid unnecessary Firebase writes)
+                        if (JSON.stringify(currentEntry) !== JSON.stringify(updatedEntry)) {
+                            db.entries[existingIdx] = updatedEntry;
+                            if (window.saveEntryToFirebase) window.saveEntryToFirebase(updatedEntry);
+                            updatedCount++;
+                            console.log(`[saveBulkEntries] Updated existing entry: ID ${updatedEntry.id}, Romaneio ${updatedEntry.romaneio}, Date ${updatedEntry.date}`);
+                        } else {
+                            skippedCount++; // No change needed, so skip
+                            console.log(`[saveBulkEntries] Skipped identical entry: ID ${currentEntry.id}, Romaneio ${currentEntry.romaneio}, Date ${currentEntry.date}`);
+                        }
                     } else {
+                        // No existing entry found, add as new
                         db.entries.push(e);
                         if (window.saveEntryToFirebase) window.saveEntryToFirebase(e);
+                        addedCount++;
+                        console.log(`[saveBulkEntries] Added new entry: ID ${e.id}, Romaneio ${e.romaneio}, Date ${e.date}`);
                     }
 
+                    // Update auxiliary collections (farms, varieties, etc.)
                     if (e.farm !== '---' && !db.farms.includes(e.farm)) db.farms.push(e.farm);
                     if (e.variety !== '---' && !db.varieties.includes(e.variety)) db.varieties.push(e.variety);
                     if (e.owner !== '---' && !db.owners.includes(e.owner)) db.owners.push(e.owner);
                     if (e.warehouse !== '---' && !db.warehouses.includes(e.warehouse)) db.warehouses.push(e.warehouse);
                     if (e.team !== '---' && !db.teams.includes(e.team)) db.teams.push(e.team);
                 });
-                saveToDB(); clearImportPreview(); alert('Sucesso!');
+
+                saveToDB();
+                clearImportPreview();
+                alert(`Importação concluída!\n\n- ${addedCount} Novos registros\n- ${updatedCount} Registros atualizados\n- ${skippedCount} Registros ignorados (sem alterações ou já idênticos)`);
             }
         }
 
         // NAVIGATION & UI
-        function switchTab(id) {
+        function switchTab(tabId) {
             ['dashboard', 'harvest', 'romaneios', 'deposits', 'farms', 'reports'].forEach(t => {
-                document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== id);
-                document.getElementById(`btn-${t}`).classList.toggle('tab-active', t === id);
-                document.getElementById(`btn-${t}`).classList.toggle('tab-inactive', t !== id);
+                const section = document.getElementById(`tab-${t}`);
+                const btn = document.getElementById(`btn-${t}`);
+                
+                section.classList.toggle('hidden', t !== tabId);
+                section.classList.toggle('active-tab', t === tabId); // Classe para impressão
+                
+                btn.classList.toggle('tab-active', t === tabId);
+                btn.classList.toggle('tab-inactive', t !== tabId);
             });
+            
+            // Atualiza data de impressão
+            if (document.getElementById('print-date')) {
+                document.getElementById('print-date').innerText = new Date().toLocaleString('pt-BR');
+            }
+
             renderAll();
         }
 
@@ -1457,35 +1731,18 @@
                 const foundRom = db.entries[existingIdx].romaneio;
                 const isPlaceholder = db.entries[existingIdx].farm === '---' || !db.entries[existingIdx].farm;
                 
-                if (isPlaceholder) {
-                    // Se for apenas um registro rápido de via, atualizamos com os dados da colheita
-                    const currentEntry = db.entries[existingIdx];
-                    finalEntry = {
-                        ...currentEntry,
-                        ...entryData,
-                        viaBranca: Math.max(currentEntry.viaBranca || 0, entryData.viaBranca),
-                        viaAzul: Math.max(currentEntry.viaAzul || 0, entryData.viaAzul)
-                    };
-                    db.entries[existingIdx] = finalEntry;
-                } else {
-                    // SE JÁ TIVER DADOS DE COLHEITA, É UMA DUPLICATA REAL -> BLOQUEIA
-                    alert(`ERRO: O Romaneio ${foundRom} já foi lançado na colheita anteriormente!\n\nLocalizando registro...`);
-                    
-                    // Redireciona para o registro existente para facilitar localização
-                    switchTab('romaneios');
-                    document.getElementById('filter-rom-num').value = newParts[0];
-                    renderRomaneios();
-                    
-                    const safeId = String(foundRom).replace(/[^a-z0-9]/gi, '_');
-                    const row = document.getElementById(`rom-row-${safeId}`);
-                    if (row) {
-                        row.classList.add('bg-amber-100');
-                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        setTimeout(() => row.classList.remove('bg-amber-100'), 3000);
-                    }
-                    return; // Interrompe o salvamento
-                }
+                // Se o romaneio já existe e NÃO é um placeholder, significa que estamos editando um registro existente.
+                // Ou se for um placeholder, estamos completando-o.
+                const currentEntry = db.entries[existingIdx];
+                finalEntry = {
+                    ...currentEntry, // Mantém o ID original e outras propriedades
+                    ...entryData,    // Atualiza com os novos dados do formulário
+                    viaBranca: Math.max(currentEntry.viaBranca || 0, entryData.viaBranca),
+                    viaAzul: Math.max(currentEntry.viaAzul || 0, entryData.viaAzul)
+                };
+                db.entries[existingIdx] = finalEntry;
             } else {
+                // Se não existe, cria um novo registro
                 finalEntry = { id: Date.now(), ...entryData };
                 db.entries.push(finalEntry);
             }
@@ -1541,8 +1798,7 @@
                      renderRomaneios();
                      
                      // Efeito visual de destaque
-                     const safeId = String(existing.romaneio).replace(/[^a-z0-9]/gi, '_');
-                     const row = document.getElementById(`rom-row-${safeId}`);
+                     const row = document.getElementById(`rom-row-${existing.id}`);
                      if (row) {
                         row.classList.add('bg-amber-100');
                         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1659,20 +1915,59 @@
             const entry = db.entries.find(e => e.id === id);
             if (!entry) return;
 
+            // Busca produtor nos dados da fazenda
+            const farmInfo = db.farmAreas.find(a => a.farm === entry.farm);
+            const producer = farmInfo ? farmInfo.producer : 'SRM';
+
+            // Calcula acumulado da fazenda
+            const farmEntries = db.entries.filter(e => e.farm === entry.farm);
+            const totalKgFarm = farmEntries.reduce((acc, curr) => acc + curr.liquido, 0);
+            const totalSacksFarm = totalKgFarm / 60;
+
+            const getStatusLabel = (val) => {
+                if (val === 1) return 'COMIGO';
+                if (val === 2) return 'FLORESTA';
+                if (val === 3) return 'PANORAMA';
+                if (val === 4) return 'NA VALE';
+                return 'PENDENTE';
+            };
+
             document.getElementById('print-farm').innerText = entry.farm;
-            document.getElementById('print-date').innerText = new Date(entry.date).toLocaleDateString('pt-BR');
+            document.getElementById('print-producer').innerText = producer;
+            document.getElementById('print-date-val').innerText = new Date(entry.date).toLocaleDateString('pt-BR');
             document.getElementById('print-romaneio').innerText = entry.romaneio;
             document.getElementById('print-ticket').innerText = entry.ticket || '---';
-            document.getElementById('print-owner').innerText = entry.owner;
+            document.getElementById('print-owner-loc').innerText = `${entry.owner} / ${entry.warehouse}`;
             document.getElementById('print-team').innerText = entry.team;
             document.getElementById('print-variety').innerText = entry.variety;
             document.getElementById('print-bruto').innerText = entry.bruto.toLocaleString('pt-BR') + ' kg';
             document.getElementById('print-tara').innerText = entry.tara.toLocaleString('pt-BR') + ' kg';
             document.getElementById('print-desc').innerText = (entry.desc || 0).toLocaleString('pt-BR') + ' kg';
             document.getElementById('print-liquido').innerText = entry.liquido.toLocaleString('pt-BR') + ' kg';
-            document.getElementById('print-sacks').innerText = (entry.liquido / 60).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+            document.getElementById('print-sacks').innerText = (entry.liquido / 60).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' sc';
+            document.getElementById('print-now').innerText = new Date().toLocaleString('pt-BR');
+            
+            document.getElementById('print-via-branca').innerText = getStatusLabel(entry.viaBranca);
+            document.getElementById('print-via-azul').innerText = getStatusLabel(entry.viaAzul);
+            
+            document.getElementById('print-farm-total-loads').innerText = farmEntries.length + ' CARGAS';
+            document.getElementById('print-farm-total-sacks').innerText = totalSacksFarm.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' sacos';
 
+            const obsSection = document.getElementById('print-obs-section');
+            if (entry.obs && entry.obs !== '---' && entry.obs !== 'Importado via Excel' && entry.obs !== 'Registrado via Lançamento Rápido') {
+                obsSection.style.display = 'block';
+                document.getElementById('print-obs').innerText = entry.obs;
+            } else {
+                obsSection.style.display = 'none';
+            }
+
+            // Mostra apenas a área de impressão individual
+            const printArea = document.getElementById('print-area');
+            printArea.classList.remove('hidden');
+            
             window.print();
+            
+            printArea.classList.add('hidden');
         }
 
         function handleFarmAreaSubmit(e) {
@@ -1723,59 +2018,67 @@
         }
 
         function seedData() {
-            // Se já existem áreas cadastradas, não sobrescreve (preserva alterações manuais)
-            if (db.farmAreas && db.farmAreas.length > 0) {
-                console.log("Áreas já configuradas. Pulando seed oficial.");
-                return;
-            }
+            // REMOÇÃO TEMPORÁRIA: Para forçar a atualização com a nova lista de fazendas
+            // if (db.farmAreas && db.farmAreas.length > 0) {
+            //    console.log("Áreas já configuradas. Pulando seed oficial.");
+            //    return;
+            // }
 
-            // LISTA OFICIAL DEFINITIVA (Total: 5247,86 Há)
+            // LISTA OFICIAL DEFINITIVA (Total: 5485,45 Há)
             const officialList = [
-                [141, "0141-PANORAMA II", 7.45, "BONUS 8579 IPRO"], [157, "SANTA HELENA I", 517.54, "NEOGEN 680 IPRO"],
-                [162, "LAVA ZÓIO", 225.29, "M6210 IPRO"], [175, "NOVO HORIZONTE", 311.00, "NEOGEN 750 IPRO"],
-                [175, "NOVO HORIZONTE", 226.19, "BONUS 8579 IPRO"], [182, "0182-FAZ POUSO DA BOIADA", 14.15, "NEOGEN 680 IPRO"],
-                [193, "PANORAMA III", 29.37, "BONUS 8579 IPRO"], [1030, "ORIENTE", 8.20, "M6210 IPRO"],
-                [1078, "CACHOEIRA CABELEIRA", 113.83, "M6210 IPRO"], [1095, "TRÊS IRMÃS", 105.25, "M6210 IPRO"],
-                [1101, "ALTA VENEZA A", 61.52, "M6210 IPRO"], [1125, "LEMBRANÇA", 121.69, "M6210 IPRO"],
-                [1288, "OLHOS D' AGUA", 106.37, "M6210 IPRO"], [1288, "OLHOS D' AGUA", 321.11, "NEOGEN 680 IPRO"],
-                [1288, "OLHOS D' AGUA", 196.18, "NEOGEN 740 IPRO"], [1291, "SANTO EXPEDITO", 38.79, "BONUS 8579 IPRO"],
-                [1292, "NACIONAL", 157.16, "M6210 IPRO"], [1292, "NACIONAL", 274.87, "NEOGEN 740 IPRO"],
-                [1292, "NACIONAL", 105.61, "NEOGEN 750 IPRO"], [1293, "CABELEIRA PAZ CACHOEIRA", 158.04, "M6210 IPRO"],
-                [1293, "CABELEIRA PAZ CACHOEIRA", 102.31, "NEOGEN 740 IPRO"], [1296, "CAMPOS", 146.04, "NEOGEN 750 IPRO"],
-                [1297, "SANTA CLARA", 54.00, "M6210 IPRO"], [1297, "SANTA CLARA", 59.63, "NEOGEN 740 IPRO"],
-                [1301, "NOSSA SENHORA DAS MERCES(DECO)", 63.10, "NEOGEN 740 IPRO"], [1311, "SANTA NARCISA", 22.53, "M6210 IPRO"],
-                [1311, "SANTA NARCISA", 67.63, "NEOGEN 750 IPRO"], [1317, "FAZENDA CABELEIRA (JRM)", 83.76, "NEOGEN 750 IPRO"],
-                [1323, "BRASILÍA PRÓPRIA", 128.48, "BONUS 8579 IPRO"], [1361, "SÃO MATHEUS II", 80.00, "NEOGEN 750 IPRO"],
-                [1361, "SÃO MATHEUS II", 30.55, "BONUS 8579 IPRO"], [1362, "SÃO MATHEUS III", 136.29, "BONUS 8579 IPRO"],
-                [1367, "NOVA FLORESTA A", 67.55, "M6210 IPRO"], [1371, "SERRA AZUL ( GLEBA 2)", 167.77, "BONUS 8579 IPRO"],
-                [1372, "CORREGO FUNDO (GLEBA 3)", 65.40, "BONUS 8579 IPRO"], [1380, "CABELEIRA PAIVA", 32.21, "BONUS 8579 IPRO"],
-                [1400, "SÃO TOMAZ CAB. INVERNADA", 95.11, "BONUS 8579 IPRO"], [1459, "ALTA VENEZA B", 43.17, "M6210 IPRO"],
-                [1460, "ALTA VENEZA C", 30.23, "M6210 IPRO"], [1464, "ITAJUBÁ", 147.40, "M6210 IPRO"],
-                [1099, "GAMELEIRA", 203.61, "BONUS 8579 IPRO"], [1185, "SÃO PAULO", 7.00, "BONUS 8579 IPRO"],
-                [1409, "BAUZINHO LAURO", 92.40, "BONUS 8579 IPRO"], [1373, "SÃO TOMAZ CORREGO FUNDO", 23.54, "BONUS 8579 IPRO"],
-                [1373, "SÃO TOMAZ CORREGO FUNDO", 32.85, "AGN 8019"], [8008, "BAUZINHO CABELEIRA", 19.44, "BONUS 8579 IPRO"],
-                [8061, "SÃO TOMAZ/SÃO PEDRO", 17.03, "AGN 8019"], [1237, "SANTA MARIA", 58.10, "BONUS 8579 IPRO"],
-                [1381, "SANTA FÉ CABELEIRA", 23.88, "NEOGEN 750 IPRO"], [1389, "CABELEIRA CAPELINHA", 11.56, "NEOGEN 750 IPRO"],
-                [1303, "CABELEIRA LEONOR", 35.68, "BONUS 8579 IPRO"]
+                [123, "MAGNÓLIA", 71.12, "NEOGEN 790", "SRM"], [140, "PANORAMA I", 28.51, "MONSOY 7601", "SRM"],
+                [140, "PANORAMA I", 210.77, "NEOGEN 790", "SRM"], [143, "SÃO JOSÉ (ARRENDADA)", 117.67, "TORMENTA", "SRM"],
+                [143, "SÃO JOSÉ (ARRENDADA)", 121.59, "NEOGEN 790", "SRM"], [143, "SÃO JOSÉ (ARRENDADA)", 25.09, "MONSOY 7601", "SRM"],
+                [157, "SANTA HELENA I", 152.33, "NEOGEN 680", "SRM"], [162, "LAVA ZOI", 77.61, "TORMENTA", "SRM"],
+                [162, "LAVA ZOI", 19.00, "NEOGEN 750", "SRM"], [162, "LAVA ZOI", 64.01, "NEOGEN 680", "SRM"],
+                [175, "NOVO HORIZONTE", 51.72, "NEOGEN 680", "SRM"], [179, "NOVA VENEZA", 49.72, "NEOGEN 790", "SRM"],
+                [182, "POUSO DA BOIADA", 14.15, "NEOGEN 680", "SRM"], [1040, "QUINO", 154.53, "NEOGEN 680", "SRM"],
+                [1062, "INDIANA", 27.75, "NEOGEN 700", "SRM"], [1063, "BAUZINHO CABELEIRA", 39.72, "NEOGEN 790", "SRM"],
+                [1078, "CACHOEIRA CARNEIRO", 43.60, "NEOGEN 700", "SRM"], [1095, "TRÊS IRMÃS", 85.38, "NEOGEN 680", "SRM"],
+                [1101, "ALTA VENEZA", 39.87, "TORMENTA", "SRM"], [1104, "PRIMAVERA", 133.72, "TORMENTA", "SRM"],
+                [1106, "JOÃO JOSÉ", 26.00, "NEOGEN 700", "SRM"], [1125, "LEMBRANÇA", 6.08, "NEOGEN 750", "SRM"],
+                [1199, "SÃO CARLOS", 32.43, "NEOGEN 790", "SRM"], [1203, "BOA ESP. HILÁRIO", 77.32, "NEOGEN 790", "SRM"],
+                [1216, "SÃO MATHEUS", 91.23, "NEOGEN 790", "SRM"], [1218, "FORTALEZA OUROANA", 135.94, "TORMENTA", "SRM"],
+                [1239, "LA SILLA", 15.00, "NEOGEN 790", "SRM"], [1240, "MARIA LETICIA", 129.60, "NEOGEN 700", "SRM"],
+                [1240, "MARIA LETICIA", 29.11, "TORMENTA", "SRM"], [1272, "CABELEIRA MARLI", 259.41, "NEOGEN 750", "SRM"],
+                [1292, "NACIONAL", 128.71, "NEOGEN 680", "SRM"], [1292, "NACIONAL", 401.38, "NEOGEN 790", "SRM"],
+                [1292, "NACIONAL", 56.20, "TORMENTA", "SRM"], [1304, "BELA VISTA DIVISA", 53.09, "NEOGEN 790", "SRM"],
+                [1318, "SANTA TEREZINHA", 83.02, "NEOGEN 790", "SRM"], [1370, "CAMPO BELO", 150.05, "NEOGEN 790", "SRM"],
+                [1383, "FORTALEZA TONHÃO A", 73.00, "TORMENTA", "SRM"], [1383, "FORTALEZA TONHÃO A", 27.74, "NEOGEN 790", "SRM"],
+                [1401, "CABELEIRA INVERNADA", 7.00, "NEOGEN 680", "SRM"], [1414, "VANDERY", 95.74, "NEOGEN 790", "SRM"],
+                [1441, "INVERNADA", 206.97, "NEOGEN 680", "SRM"], [1441, "INVERNADA", 117.77, "NEOGEN 750", "SRM"],
+                [1441, "INVERNADA", 112.90, "TORMENTA", "SRM"], [1444, "FORTALEZA TONHÃO D", 26.45, "NEOGEN 680", "SRM"],
+                [1445, "FORTALEZA TONHÃO E", 30.29, "NEOGEN 680", "SRM"], [1450, "INVERNADA PRÓPRIA", 57.29, "NEOGEN 680", "SRM"],
+                [1460, "ALTA VENEZA", 30.22, "NEOGEN 750", "SRM"], [1464, "ITAJUBA", 147.40, "TORMENTA", "SRM"],
+                [1485, "SANTA LUZIA", 83.00, "NEOGEN 700", "SRM"], [1485, "SANTA LUZIA", 305.34, "NEOGEN 680", "SRM"],
+                [1485, "SANTA LUZIA", 9.63, "NEOGEN 790", "SRM"], [1492, "SANTA TEREZINHA II", 5.40, "NEOGEN 790", "SRM"],
+                [1498, "SÃO JOSÉ PRÓPRIA", 14.38, "NEOGEN 700", "SRM"], [1498, "SÃO JOSÉ PRÓPRIA", 44.58, "TORMENTA", "SRM"],
+                [1498, "SÃO JOSÉ PRÓPRIA", 204.58, "NEOGEN 790", "SRM"], [1498, "SÃO JOSÉ PRÓPRIA", 87.44, "MONSOY 7601", "SRM"],
+                [1515, "NOVA CALIFÓRNIA", 36.00, "NEOGEN 680", "SRM"], [1515, "NOVA CALIFÓRNIA", 35.62, "NEOGEN 750", "SRM"],
+                [1516, "SANTA HELENA II", 26.20, "NEOGEN 680", "SRM"], [1538, "NOVA CALIFÓRNIA III", 6.83, "NEOGEN 680", "SRM"],
+                [8061, "SÃO TOMAZ DANIELA", 56.14, "TORMENTA", "LEONARDO MENDONÇA"], [209, "POUSO DA BOIADA PRIMAVERA", 59.01, "NEOGEN 750", "PRIMAVERA"]
             ];
 
-            // RESET COMPLETO para garantir o valor exato de 5247,86 Há
+            // RESET COMPLETO para garantir o valor exato de 5485,45 Há
             db.farmAreas = [];
             db.farms = [];
             
-            officialList.forEach(([code, name, area, variety]) => {
-                db.farmAreas.push({ code, farm: name, variety: variety || 'Todas', area: area });
+            officialList.forEach(([code, name, area, variety, producer]) => {
+                db.farmAreas.push({ code, farm: name, variety: variety || 'Todas', area: area, producer: producer || 'SRM' });
                 if (!db.farms.includes(name)) db.farms.push(name);
             });
 
-            const varieties = ["MONSOY 7601", "NEOGEN 790", "NEOGEN 680", "NEOGEN 750", "TORMENTA", "NEOGEN 700", "BONUS 8579 IPRO", "M6210 IPRO", "NEOGEN 740 IPRO", "AGN 8019"];
+            const varieties = ["MONSOY 7601", "NEOGEN 790", "NEOGEN 680", "NEOGEN 750", "TORMENTA", "NEOGEN 700"];
             varieties.forEach(v => {
                 if (!db.varieties.includes(v)) db.varieties.push(v);
             });
 
             saveToDB();
             if (window.saveSettingsToFirebase) window.saveSettingsToFirebase('farmAreas', db.farmAreas);
-            console.log("Seed oficial concluído: 5247,86 Há configurados.");
+            console.log("Seed oficial concluído: 5485,45 Há configurados.");
+            
+            // Força a renderização imediata após o seed
+            renderAll();
         }
 
         // RENDERS
@@ -1818,7 +2121,8 @@
             const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
             
             const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
-            document.getElementById('total-sacks-val').innerText = (totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+            const totalSacks = totalKg / 60;
+            document.getElementById('total-sacks-val').innerText = totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
 
             const farmFilter = removeAccents(document.getElementById('filter-harvest-farm')?.value || '').toUpperCase();
             const varietyFilter = removeAccents(document.getElementById('filter-harvest-variety')?.value || '').toUpperCase();
@@ -1828,6 +2132,26 @@
                 const matchesVariety = !varietyFilter || removeAccents(e.variety).toUpperCase().includes(varietyFilter) || removeAccents(e.team).toUpperCase().includes(varietyFilter);
                 return matchesFarm && matchesVariety;
             });
+
+            // Resumo para Impressão
+            const printSummary = `
+                <div class="hidden print:grid grid-cols-3 gap-4 mb-6 border-2 border-slate-100 p-4 rounded-xl">
+                    <div>
+                        <p class="text-[8px] font-black text-slate-400 uppercase">Total de Cargas</p>
+                        <p class="text-sm font-black text-slate-800">${filteredEntries.length}</p>
+                    </div>
+                    <div>
+                        <p class="text-[8px] font-black text-slate-400 uppercase">Peso Total (T)</p>
+                        <p class="text-sm font-black text-slate-800">${(filteredEntries.reduce((a,b)=>a+b.liquido,0)/1000).toLocaleString('pt-BR', {minimumFractionDigits:1})} T</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[8px] font-black text-slate-400 uppercase">Total em Sacos</p>
+                        <p class="text-sm font-black text-blue-600">${(filteredEntries.reduce((a,b)=>a+b.liquido,0)/60).toLocaleString('pt-BR', {maximumFractionDigits:0})} sc</p>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('harvest-print-summary').innerHTML = printSummary;
 
             document.getElementById('harvest-table-body').innerHTML = filteredEntries.sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => `
                 <tr class="hover:bg-slate-50">
@@ -1939,6 +2263,18 @@
                 </div>
             `).join('');
 
+            // Resumo para Impressão Romaneios
+            const printSummary = `
+                <div class="hidden print:grid grid-cols-5 gap-2 mb-6 border-2 border-slate-100 p-4 rounded-xl text-center">
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Pendentes</p><p class="text-xs font-black">${stats.pending}</p></div>
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Comigo</p><p class="text-xs font-black">${stats.withMe}</p></div>
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Floresta</p><p class="text-xs font-black">${stats.floresta}</p></div>
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Panorama</p><p class="text-xs font-black">${stats.panorama}</p></div>
+                    <div><p class="text-[7px] font-black text-slate-400 uppercase">Na Vale</p><p class="text-xs font-black text-green-600">${stats.vale}</p></div>
+                </div>
+            `;
+            document.getElementById('romaneios-print-summary').innerHTML = printSummary;
+
             body.innerHTML = filtered.sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => {
                 const getViaButton = (type, value) => {
                     let label = 'Pendente';
@@ -1972,10 +2308,9 @@
                 };
 
                 const isComplete = e.viaBranca === 4 && e.viaAzul === 4;
-                const safeId = String(e.romaneio).replace(/[^a-z0-9]/gi, '_');
                 
                 return `
-                    <tr class="hover:bg-slate-50 transition-colors" id="rom-row-${safeId}">
+                    <tr class="hover:bg-slate-50 transition-colors" id="rom-row-${e.id}">
                         <td class="px-8 py-6">
                             <div class="font-bold text-slate-700">${new Date(e.date).toLocaleDateString('pt-BR')}</div>
                             <div class="text-xs text-blue-600 font-black tracking-tight">ROM: ${e.romaneio}</div>
@@ -2035,6 +2370,8 @@
             const totalArea = db.farmAreas.reduce((acc, curr) => acc + curr.area, 0);
             const avgProd = totalArea > 0 ? totalSacks / totalArea : 0;
 
+            console.log("Dashboard Totals - Total Kg:", totalKg, "Total Sacos:", totalSacks);
+
             document.getElementById('dashboard-stats').innerHTML = `
                 <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Produção Total</p><h4 class="text-2xl font-black">${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4></div>
                 <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Total Sacos</p><h4 class="text-2xl font-black">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</h4></div>
@@ -2052,22 +2389,43 @@
         function renderDeposits() {
             const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
             const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
+            
+            console.log("Deposits Totals - Total Kg:", totalKg, "Total Sacos:", totalKg / 60);
+
             document.getElementById('deposit-summary').innerHTML = `
                 <div class="bg-slate-900 p-8 rounded-[2rem] text-white shadow-2xl md:col-span-2"><p class="text-[10px] font-black text-slate-400 uppercase">Total Geral Depositado</p><h4 class="text-4xl font-black">${(totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} sacos</h4></div>
                 <div class="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-center"><p class="text-[10px] font-black text-slate-400 uppercase">Depositários</p><h4 class="text-3xl font-black">${db.owners.length}</h4></div>
             `;
             const groups = {};
-            realEntries.forEach(e => { const k = `${e.owner}-${e.warehouse}`; groups[k] = (groups[k] || 0) + e.liquido; });
-            document.getElementById('deposits-table-body').innerHTML = Object.entries(groups).map(([k, v]) => `
-                <tr class="hover:bg-slate-50"><td class="px-8 py-6 font-black uppercase">${k.split('-')[0]}</td><td class="px-8 py-6 font-bold text-slate-500">${k.split('-')[1]}</td><td class="px-8 py-6 text-right font-bold text-slate-400">${(v/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td><td class="px-8 py-6 text-right font-black">${(v/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td></tr>
-            `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Vazio</td></tr>';
+            realEntries.forEach(e => { 
+                const ownerName = e.owner && e.owner !== '---' ? e.owner : 'NÃO DEFINIDO';
+                const warehouseName = e.warehouse && e.warehouse !== '---' ? e.warehouse : 'NÃO DEFINIDO';
+                const k = `${ownerName}-${warehouseName}`; 
+                groups[k] = (groups[k] || 0) + e.liquido; 
+            });
+            document.getElementById('deposits-table-body').innerHTML = Object.entries(groups).map(([k, v]) => {
+                const [owner, warehouse] = k.split('-');
+                const displayOwner = owner === 'NÃO DEFINIDO' ? '' : owner;
+                const displayWarehouse = warehouse === 'NÃO DEFINIDO' ? '' : warehouse;
+                return `
+                    <tr class="hover:bg-slate-50">
+                        <td class="px-8 py-6 font-black uppercase">${displayOwner}</td>
+                        <td class="px-8 py-6 font-bold text-slate-500">${displayWarehouse}</td>
+                        <td class="px-8 py-6 text-right font-bold text-slate-400">${(v/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                        <td class="px-8 py-6 text-right font-black">${(v/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
+                    </tr>
+                `;
+            }).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Vazio</td></tr>';
         }
 
         function renderFarms() {
             document.getElementById('farms-table-body').innerHTML = db.farmAreas.map((a, idx) => `
                 <tr class="hover:bg-slate-50">
                     <td class="px-6 py-4 font-mono text-[10px] text-slate-400">${a.code || '---'}</td>
-                    <td class="px-6 py-4 font-black uppercase">${a.farm}</td>
+                    <td class="px-6 py-4">
+                        <p class="font-black uppercase leading-tight">${a.farm}</p>
+                        <p class="text-[9px] text-slate-400 font-bold uppercase">${a.producer || 'SRM'}</p>
+                    </td>
                     <td class="px-6 py-4 font-bold text-slate-400">${a.variety}</td>
                     <td class="px-6 py-4 text-right font-bold text-indigo-600">${a.area.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Há</td>
                     <td class="px-6 py-4 text-right">
