@@ -1729,9 +1729,11 @@
         function saveBulkEntries() {
             if (!window.currentUserIsAdmin) return alert('Acesso negado: Apenas o administrador pode realizar esta ação.');
             
-            let addedCount = 0;
-            let updatedCount = 0;
-            let skippedCount = 0;
+            const reportData = {
+                added: [],
+                updated: [],
+                skipped: []
+            };
 
             if (confirm(`Deseja salvar os ${importPreviewData.length} registros da pré-visualização?`)) {
                 importPreviewData.forEach(e => {
@@ -1748,33 +1750,50 @@
                         const currentEntry = db.entries[existingIdx];
                         
                         // Update existing entry with new data from import
-                        // The imported entry 'e' should overwrite fields, including 'date'
-                        // IMPORTANT: We must NOT overwrite the original 'id'
                         const { id, ...importData } = e;
                         const updatedEntry = {
-                            ...currentEntry, // Preserve original ID and any fields not in 'e'
-                            ...importData,   // Overwrite with imported data (including date)
-                            // Ensure vias are maxed out, not overwritten if existing is higher
+                            ...currentEntry, 
+                            ...importData,   
                             viaBranca: Math.max(currentEntry.viaBranca || 0, e.viaBranca || 0),
                             viaAzul: Math.max(currentEntry.viaAzul || 0, e.viaAzul || 0)
                         };
 
-                        // Only update if there's a meaningful change (to avoid unnecessary Firebase writes)
-                        if (JSON.stringify(currentEntry) !== JSON.stringify(updatedEntry)) {
+                        // Check for changes
+                        const changes = [];
+                        const fieldsToCheck = ['farm', 'warehouse', 'owner', 'ticket', 'variety', 'team', 'obs', 'bruto', 'tara', 'desc', 'liquido', 'date', 'romaneio'];
+                        
+                        fieldsToCheck.forEach(field => {
+                            if (String(currentEntry[field]) !== String(updatedEntry[field])) {
+                                changes.push({
+                                    field: field,
+                                    old: currentEntry[field],
+                                    new: updatedEntry[field]
+                                });
+                            }
+                        });
+
+                        if (changes.length > 0) {
                             db.entries[existingIdx] = updatedEntry;
                             if (window.saveEntryToFirebase) window.saveEntryToFirebase(updatedEntry);
-                            updatedCount++;
-                            console.log(`[saveBulkEntries] Updated existing entry: ID ${updatedEntry.id}, Romaneio ${updatedEntry.romaneio}, Date ${updatedEntry.date}`);
+                            reportData.updated.push({
+                                id: currentEntry.id,
+                                romaneio: currentEntry.romaneio,
+                                changes: changes
+                            });
+                            console.log(`[saveBulkEntries] Updated existing entry: ID ${updatedEntry.id}`);
                         } else {
-                            skippedCount++; // No change needed, so skip
-                            console.log(`[saveBulkEntries] Skipped identical entry: ID ${currentEntry.id}, Romaneio ${currentEntry.romaneio}, Date ${currentEntry.date}`);
+                            reportData.skipped.push({
+                                id: currentEntry.id,
+                                romaneio: currentEntry.romaneio
+                            });
+                            console.log(`[saveBulkEntries] Skipped identical entry: ID ${currentEntry.id}`);
                         }
                     } else {
                         // No existing entry found, add as new
                         db.entries.push(e);
                         if (window.saveEntryToFirebase) window.saveEntryToFirebase(e);
-                        addedCount++;
-                        console.log(`[saveBulkEntries] Added new entry: ID ${e.id}, Romaneio ${e.romaneio}, Date ${e.date}`);
+                        reportData.added.push(e);
+                        console.log(`[saveBulkEntries] Added new entry: ID ${e.id}`);
                     }
 
                     // Update auxiliary collections (farms, varieties, etc.)
@@ -1787,9 +1806,157 @@
 
                 saveToDB();
                 clearImportPreview();
-                alert(`Importação concluída!\n\n- ${addedCount} Novos registros\n- ${updatedCount} Registros atualizados\n- ${skippedCount} Registros ignorados (sem alterações ou já idênticos)`);
+                showImportReport(reportData);
             }
         }
+
+        // --- IMPORT REPORT UTILS ---
+        function showImportReport(reportData) {
+            const existing = document.getElementById('import-report-modal');
+            if (existing) existing.remove();
+
+            const timestamp = new Date().toLocaleString('pt-BR');
+            
+            const modalHtml = `
+                <div id="import-report-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999]">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h2 class="text-2xl font-bold text-slate-800">Relatório de Importação</h2>
+                                <p class="text-sm text-slate-500 mt-1">Realizado em: ${timestamp}</p>
+                            </div>
+                            <button onclick="document.getElementById('import-report-modal').remove()" class="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                                <i data-lucide="x" class="w-6 h-6 text-slate-500"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="flex-1 overflow-auto p-6 space-y-8">
+                            <!-- Resumo -->
+                            <div class="grid grid-cols-3 gap-4">
+                                <div class="bg-green-50 p-4 rounded-xl border border-green-100">
+                                    <div class="text-green-600 text-sm font-semibold uppercase tracking-wider">Novos</div>
+                                    <div class="text-3xl font-black text-green-700">${reportData.added.length}</div>
+                                </div>
+                                <div class="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                                    <div class="text-amber-600 text-sm font-semibold uppercase tracking-wider">Alterados</div>
+                                    <div class="text-3xl font-black text-amber-700">${reportData.updated.length}</div>
+                                </div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <div class="text-slate-600 text-sm font-semibold uppercase tracking-wider">Ignorados</div>
+                                    <div class="text-3xl font-black text-slate-700">${reportData.skipped.length}</div>
+                                </div>
+                            </div>
+
+                            ${reportData.updated.length > 0 ? `
+                            <!-- Detalhes de Alterações -->
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                    <i data-lucide="edit-3" class="w-5 h-5 text-amber-500"></i>
+                                    Registros Alterados
+                                </h3>
+                                <div class="space-y-3">
+                                    ${reportData.updated.map(item => `
+                                        <div class="bg-amber-50/50 rounded-lg border border-amber-100 overflow-hidden">
+                                            <div class="bg-amber-100/50 px-4 py-2 flex justify-between items-center">
+                                                <span class="font-mono font-bold text-amber-900">Romaneio: ${item.romaneio}</span>
+                                                <span class="text-xs text-amber-600 bg-amber-200/50 px-2 py-1 rounded-full">ID: ${item.id}</span>
+                                            </div>
+                                            <div class="p-4 space-y-2">
+                                                ${item.changes.map(change => `
+                                                    <div class="flex items-center text-sm gap-4">
+                                                        <span class="w-24 font-semibold text-slate-600 shrink-0 text-right">${translateField(change.field)}</span>
+                                                        <div class="flex-1 grid grid-cols-[1fr,auto,1fr] gap-2 items-center">
+                                                            <div class="bg-red-50 text-red-700 px-2 py-1 rounded border border-red-100 line-through text-xs break-all">${formatValue(change.old)}</div>
+                                                            <i data-lucide="arrow-right" class="w-4 h-4 text-slate-300"></i>
+                                                            <div class="bg-green-50 text-green-700 px-2 py-1 rounded border border-green-100 font-medium text-xs break-all">${formatValue(change.new)}</div>
+                                                        </div>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            ` : ''}
+
+                            ${reportData.added.length > 0 ? `
+                            <!-- Detalhes de Novos -->
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                    <i data-lucide="plus-circle" class="w-5 h-5 text-green-500"></i>
+                                    Novos Registros Adicionados
+                                </h3>
+                                <div class="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                                    <table class="w-full text-sm text-left">
+                                        <thead class="bg-slate-100 text-slate-500 font-semibold uppercase text-xs">
+                                            <tr>
+                                                <th class="px-4 py-3">Romaneio</th>
+                                                <th class="px-4 py-3">Fazenda</th>
+                                                <th class="px-4 py-3">Data</th>
+                                                <th class="px-4 py-3 text-right">Líquido</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-200">
+                                            ${reportData.added.map(item => `
+                                                <tr class="hover:bg-white transition-colors">
+                                                    <td class="px-4 py-2 font-mono font-medium text-slate-700">${item.romaneio}</td>
+                                                    <td class="px-4 py-2 text-slate-600">${item.farm}</td>
+                                                    <td class="px-4 py-2 text-slate-600">${formatDate(item.date)}</td>
+                                                    <td class="px-4 py-2 text-right font-mono text-slate-700">${item.liquido.toLocaleString('pt-BR')} kg</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            ` : ''}
+                        </div>
+                        
+                        <div class="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+                            <button onclick="document.getElementById('import-report-modal').remove()" class="bg-slate-900 text-white px-6 py-2 rounded-lg hover:bg-slate-800 transition-colors font-medium">
+                                Fechar Relatório
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            lucide.createIcons();
+        }
+
+        function translateField(field) {
+            const map = {
+                'farm': 'Fazenda',
+                'warehouse': 'Armazém',
+                'owner': 'Proprietário',
+                'ticket': 'Ticket',
+                'variety': 'Variedade',
+                'team': 'Equipe',
+                'obs': 'Observação',
+                'bruto': 'Peso Bruto',
+                'tara': 'Peso Tara',
+                'desc': 'Desconto',
+                'liquido': 'Peso Líquido',
+                'date': 'Data',
+                'romaneio': 'Romaneio'
+            };
+            return map[field] || field;
+        }
+
+        function formatValue(val) {
+            if (val === null || val === undefined) return '---';
+            if (typeof val === 'boolean') return val ? 'Sim' : 'Não';
+            return String(val);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '---';
+            const parts = dateStr.split('-');
+            if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+            return dateStr;
+        }
+
 
         // NAVIGATION & UI
         function switchTab(tabId) {
