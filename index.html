@@ -1773,6 +1773,15 @@
                         });
 
                         if (changes.length > 0) {
+                            // Add change history
+                            if (!updatedEntry.history) updatedEntry.history = [];
+                            updatedEntry.history.unshift({
+                                date: new Date().toISOString(),
+                                changes: changes
+                            });
+                            // Limit history to last 5 entries
+                            if (updatedEntry.history.length > 5) updatedEntry.history = updatedEntry.history.slice(0, 5);
+
                             db.entries[existingIdx] = updatedEntry;
                             if (window.saveEntryToFirebase) window.saveEntryToFirebase(updatedEntry);
                             reportData.updated.push({
@@ -1790,6 +1799,12 @@
                         }
                     } else {
                         // No existing entry found, add as new
+                        // Add creation history
+                        e.history = [{
+                            date: new Date().toISOString(),
+                            changes: [{ field: 'creation', old: null, new: 'Importado' }]
+                        }];
+                        
                         db.entries.push(e);
                         if (window.saveEntryToFirebase) window.saveEntryToFirebase(e);
                         reportData.added.push(e);
@@ -2743,12 +2758,50 @@
                 };
 
                 const isComplete = e.viaBranca === 5 && e.viaAzul === 5;
-                
+                const lastChange = e.history && e.history.length > 0 ? e.history[0] : null;
+                const isCreation = lastChange && lastChange.changes.some(c => c.field === 'creation');
+                const changeLabel = isCreation ? 'Novo' : 'Alt';
+                const changeColor = isCreation ? 'text-green-600' : 'text-amber-600';
+                const tooltipColor = isCreation ? 'text-green-400' : 'text-amber-400';
+
                 return `
                     <tr class="hover:bg-slate-50 transition-colors" id="rom-row-${e.id}">
-                        <td class="px-8 py-6">
+                        <td class="px-8 py-6 relative group/cell">
                             <div class="font-bold text-slate-700">${new Date(e.date).toLocaleDateString('pt-BR')}</div>
                             <div class="text-xs text-blue-600 font-black tracking-tight">ROM: ${e.romaneio}</div>
+                            
+                            ${lastChange ? `
+                            <div class="mt-2 pt-2 border-t border-slate-100">
+                                <div class="flex items-center gap-1 text-[9px] ${changeColor} font-bold cursor-help group/hist relative">
+                                    <i data-lucide="${isCreation ? 'plus-circle' : 'history'}" size="10"></i>
+                                    <span>${changeLabel}: ${new Date(lastChange.date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
+                                    
+                                    <!-- Tooltip de Histórico -->
+                                    <div class="absolute left-0 bottom-full mb-2 w-64 bg-slate-900 text-white text-[10px] p-3 rounded-xl shadow-2xl opacity-0 invisible group-hover/hist:opacity-100 group-hover/hist:visible transition-all z-50 pointer-events-none transform translate-y-2 group-hover/hist:translate-y-0">
+                                        <div class="font-bold border-b border-slate-700 pb-2 mb-2 ${tooltipColor} flex justify-between items-center">
+                                            <span>${isCreation ? 'Adicionado em' : 'Alterado em'} ${new Date(lastChange.date).toLocaleDateString('pt-BR')}</span>
+                                            <i data-lucide="clock" size="10"></i>
+                                        </div>
+                                        <div class="space-y-2">
+                                        ${lastChange.changes.map(c => 
+                                            c.field === 'creation' ? 
+                                            `<div class="text-green-400 font-bold text-center py-1 bg-green-900/20 rounded border border-green-900/50">✨ Registro Importado</div>` :
+                                            `
+                                            <div class="flex flex-col gap-1 border-b border-slate-800 pb-2 last:border-0 last:pb-0">
+                                                <span class="text-slate-400 font-black uppercase tracking-wider text-[8px]">${translateField(c.field)}</span>
+                                                <div class="flex items-center justify-between gap-2 bg-slate-800/50 p-1.5 rounded-lg">
+                                                    <span class="text-red-300 line-through decoration-red-500/50 opacity-70 text-[9px]">${formatValue(c.old)}</span>
+                                                    <i data-lucide="arrow-right" class="w-3 h-3 text-slate-500"></i>
+                                                    <span class="text-green-300 font-bold text-[9px]">${formatValue(c.new)}</span>
+                                                </div>
+                                            </div>
+                                            `
+                                        ).join('')}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            ` : ''}
                         </td>
                         <td class="px-8 py-6">
                             <div class="font-black text-slate-800 uppercase text-xs">
