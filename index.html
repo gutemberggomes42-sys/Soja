@@ -2556,7 +2556,7 @@
         function handleDepositTargetSubmit(e) {
             e.preventDefault();
             if (!window.currentUserIsAdmin) return alert('Acesso negado: Apenas o administrador pode realizar esta ação.');
-            const o = document.getElementById('target-owner').value.trim();
+            const owner = document.getElementById('target-owner').value.trim();
             const warehouse = document.getElementById('target-warehouse').value.trim();
             const sacks = parseFloat(document.getElementById('target-sacks').value);
 
