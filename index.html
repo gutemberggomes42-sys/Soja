@@ -1427,7 +1427,6 @@
             if (!db.entries || db.entries.length < 2 || !window.currentUserIsAdmin) return;
             
             const uniqueEntries = [];
-            const romMap = new Map(); // romPart -> entryIndex
             const toDeleteFromFirebase = [];
 
             // Ordena por completude (tem fazenda primeiro) e depois por data (mais recente)
@@ -1438,28 +1437,56 @@
                 return new Date(b.date) - new Date(a.date);
             });
 
+            // Map para agrupar por número base do romaneio
+            // Chave: Número do Romaneio -> Valor: Array de índices em uniqueEntries
+            const romGroups = new Map(); 
+
             sorted.forEach(entry => {
                 const parts = extractRomaneioParts(entry.romaneio);
-                let existingIdx = -1;
-                
+                let isDuplicate = false;
+                let originalEntryIdx = -1;
+
+                // Verifica se já existe algum registro com esse número de romaneio
                 for (const p of parts) {
-                    if (romMap.has(p)) {
-                        existingIdx = romMap.get(p);
-                        break;
+                    if (romGroups.has(p)) {
+                        const candidates = romGroups.get(p);
+                        
+                        // Verifica cada candidato para ver se é REALMENTE duplicado (Ticket igual ou vazio)
+                        for (const idx of candidates) {
+                            const candidate = uniqueEntries[idx];
+                            
+                            // Extrai tickets normalizados (apenas números)
+                            const t1 = String(entry.ticket || '').replace(/\D/g, '');
+                            const t2 = String(candidate.ticket || '').replace(/\D/g, '');
+                            
+                            // Se ambos têm tickets válidos e diferentes, NÃO é duplicado (são cargas diferentes do mesmo romaneio)
+                            if (t1 && t2 && t1 !== t2) {
+                                continue; // Próximo candidato
+                            }
+                            
+                            // Se chegou aqui, ou os tickets são iguais, ou um deles é vazio/inválido.
+                            // Consideramos duplicado para mesclar/limpar.
+                            isDuplicate = true;
+                            originalEntryIdx = idx;
+                            break;
+                        }
                     }
+                    if (isDuplicate) break;
                 }
 
-                if (existingIdx === -1) {
+                if (!isDuplicate) {
+                    // Adiciona como novo registro único
                     uniqueEntries.push(entry);
                     const newIdx = uniqueEntries.length - 1;
-                    parts.forEach(p => romMap.set(p, newIdx));
-                } else {
-                    // Duplicado encontrado!
-                    const existing = uniqueEntries[existingIdx];
                     
-                    // Se o duplicado atual (entry) for MAIS completo que o que já guardamos (existing)
-                    // Ou se as datas forem diferentes e o entry for o "real" (que veio de import)
-                    // (Mas já ordenamos, então o 'existing' tende a ser o melhor)
+                    // Registra o índice para todas as partes do romaneio
+                    parts.forEach(p => {
+                        if (!romGroups.has(p)) romGroups.set(p, []);
+                        romGroups.get(p).push(newIdx);
+                    });
+                } else {
+                    // Duplicado encontrado! Mescla com o original
+                    const existing = uniqueEntries[originalEntryIdx];
                     
                     // Mescla status das vias
                     const oldVBranca = existing.viaBranca || 0;
@@ -1469,6 +1496,12 @@
 
                     // Se houve mudança no status das vias, marca para salvar o 'existing'
                     if (existing.viaBranca !== oldVBranca || existing.viaAzul !== oldVAzul) {
+                        if (window.saveEntryToFirebase) window.saveEntryToFirebase(existing);
+                    }
+                    
+                    // Preserva histórico se o duplicado tiver histórico e o original não
+                    if (entry.history && (!existing.history || existing.history.length === 0)) {
+                        existing.history = entry.history;
                         if (window.saveEntryToFirebase) window.saveEntryToFirebase(existing);
                     }
 
@@ -1768,14 +1801,22 @@
                         // If tickets are different, it's a DIFFERENT entry (multi-ticket romaneio)
                         if (romaneioMatch) {
                             // Normalize tickets for comparison
-                            const t1 = String(entry.ticket || '').replace(/\D/g, '');
-                            const t2 = String(e.ticket || '').replace(/\D/g, '');
+                            // Extract only numbers for comparison, but allow '---' or empty to match anything (to update placeholders)
+                            const t1Raw = String(entry.ticket || '').trim();
+                            const t2Raw = String(e.ticket || '').trim();
                             
-                            // If both have valid tickets and they are different, it's NOT a match (it's a new entry)
-                            if (t1 && t2 && t1 !== t2) return false;
+                            const t1 = t1Raw.replace(/\D/g, '');
+                            const t2 = t2Raw.replace(/\D/g, '');
                             
-                            // If tickets match or one is missing, treat as same entry to update/fill
-                            return true;
+                            // If existing ticket is a placeholder (---) or empty, we treat it as a match to update it
+                            if (!t1 || t1Raw === '---') return true;
+                            
+                            // If imported ticket is empty/placeholder, we shouldn't overwrite a valid ticket, so treat as new entry?
+                            // No, if imported has no ticket, it's probably bad data, but we follow standard logic.
+                            if (!t2 || t2Raw === '---') return false; // Don't match valid existing ticket with invalid imported ticket
+                            
+                            // If both are valid numbers, they MUST be equal to match
+                            return t1 === t2;
                         }
                         
                         return false;
@@ -2788,7 +2829,7 @@
                 const isComplete = group.every(e => e.viaBranca === 5 && e.viaAzul === 5);
                 
                 // Helper to render buttons for a specific entry (or disabled/summary for group)
-                const getViaButton = (type, value, id) => {
+                const getViaButton = (type, value, id, isGroup = false) => {
                     let label = 'Pendente';
                     let colorClass = 'bg-slate-100 text-slate-400 hover:bg-amber-50';
                     let icon = 'circle';
@@ -2799,10 +2840,15 @@
                     else if (value === 4) { label = 'Usina Vale'; colorClass = 'bg-green-100 text-green-700 hover:bg-blue-50'; icon = 'check-circle-2'; }
                     else if (value === 5) { label = 'Controladoria'; colorClass = 'bg-blue-100 text-blue-700'; icon = 'shield-check'; }
                     
+                    const action = isGroup 
+                        ? `if(window.currentUserIsAdmin) cycleGroupViaStatus('${id}', '${type}')` 
+                        : `if(window.currentUserIsAdmin) cycleViaStatus(${id}, '${type}')`;
+
                     return `
-                        <button onclick="if(window.currentUserIsAdmin) cycleViaStatus(${id}, '${type}')" class="group relative inline-flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${colorClass} w-full justify-center border border-transparent ${window.currentUserIsAdmin ? 'hover:border-slate-200 cursor-pointer' : 'cursor-default'} shadow-sm">
+                        <button onclick="${action}" class="group relative inline-flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${colorClass} w-full justify-center border border-transparent ${window.currentUserIsAdmin ? 'hover:border-slate-200 cursor-pointer' : 'cursor-default'} shadow-sm">
                             <i data-lucide="${icon}" size="12"></i>
                             <span class="text-[9px] font-black uppercase tracking-widest truncate">${label}</span>
+                            ${isGroup ? '<span class="ml-1 text-[8px] opacity-60">(Todos)</span>' : ''}
                         </button>
                     `;
                 };
@@ -2861,16 +2907,22 @@
                                 <div class="font-black text-slate-800 uppercase text-xs truncate" title="${e.farm}">
                                     ${e.farm === '---' ? '<span class="text-amber-500 italic">AGUARDANDO LANÇAMENTO</span>' : e.farm}
                                 </div>
-                                <div class="text-[9px] text-slate-400 font-bold uppercase truncate">${e.team} • ${e.warehouse}</div>
+                                <div class="text-[9px] text-slate-400 font-bold uppercase break-words leading-tight mt-1">${e.team} • ${e.warehouse}</div>
                             </div>
 
-                            <!-- Buttons -->
+                            <!-- Buttons (Hidden if Multi-ticket, handled by group) -->
+                            ${!isMulti ? `
                             <div class="col-span-2">
                                 ${getViaButton('viaBranca', e.viaBranca || 0, e.id)}
                             </div>
                             <div class="col-span-2">
                                 ${getViaButton('viaAzul', e.viaAzul || 0, e.id)}
                             </div>
+                            ` : `
+                            <div class="col-span-4 flex items-center justify-center">
+                                <span class="text-[9px] text-slate-400 italic">Gerenciado pelo grupo</span>
+                            </div>
+                            `}
 
                             <!-- Actions -->
                             <div class="col-span-2 flex justify-end gap-2">
@@ -2888,11 +2940,24 @@
                             <div class="flex flex-col">
                                 <!-- Group Header (Romaneio Number) -->
                                 <div class="bg-slate-50/80 px-8 py-3 flex items-center justify-between border-b border-slate-100">
-                                    <div class="flex items-center gap-3">
+                                    <div class="flex items-center gap-3 w-1/4">
                                         <div class="text-sm text-blue-600 font-black tracking-tight">ROM: ${mainEntry.romaneio}</div>
                                         ${isMulti ? `<span class="bg-blue-100 text-blue-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">${group.length} Tickets</span>` : ''}
                                     </div>
-                                    <div class="flex items-center gap-3">
+
+                                    ${isMulti ? `
+                                    <!-- Group Controls (Only for multi-ticket) -->
+                                    <div class="flex items-center gap-4 flex-1 justify-center">
+                                        <div class="w-48">
+                                            ${getViaButton('viaBranca', mainEntry.viaBranca || 0, extractRomaneioParts(mainEntry.romaneio)[0] || mainEntry.romaneio, true)}
+                                        </div>
+                                        <div class="w-48">
+                                            ${getViaButton('viaAzul', mainEntry.viaAzul || 0, extractRomaneioParts(mainEntry.romaneio)[0] || mainEntry.romaneio, true)}
+                                        </div>
+                                    </div>
+                                    ` : '<div class="flex-1"></div>'}
+                                    
+                                    <div class="flex items-center gap-3 justify-end w-1/4">
                                         <span class="inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${isComplete ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'}">
                                             ${isComplete ? 'Todos Concluídos' : 'Em Fluxo'}
                                         </span>
@@ -2910,6 +2975,30 @@
             }).join('') || '<tr><td colspan="5" class="py-12 text-center text-slate-300">Nenhum romaneio encontrado</td></tr>';
             
             lucide.createIcons();
+        }
+
+        function cycleGroupViaStatus(romaneioKey, type) {
+            if (!window.currentUserIsAdmin) return alert('Acesso negado.');
+            
+            // Encontra todos os tickets desse grupo
+            const groupEntries = db.entries.filter(e => {
+                const keys = extractRomaneioParts(e.romaneio);
+                return keys.includes(String(romaneioKey)) || e.romaneio === romaneioKey;
+            });
+
+            if (groupEntries.length === 0) return;
+
+            // Determina o próximo status baseado no primeiro item
+            const current = groupEntries[0][type] || 0;
+            const nextStatus = (current + 1) % 6;
+
+            // Atualiza TODOS os itens do grupo
+            groupEntries.forEach(entry => {
+                entry[type] = nextStatus;
+                if (window.saveEntryToFirebase) window.saveEntryToFirebase(entry);
+            });
+
+            saveToDB();
         }
 
         function cycleViaStatus(id, type) {
