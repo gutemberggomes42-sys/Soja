@@ -151,7 +151,27 @@
             // Primeiro coloca todos os locais
             local.forEach(item => map.set(String(item.id), item));
             // Sobrescreve/Adiciona com os da nuvem (nuvem é a fonte da verdade)
-            cloud.forEach(item => map.set(String(item.id), item));
+            cloud.forEach(cloudItem => {
+                const localItem = map.get(String(cloudItem.id));
+                
+                // PRESERVAÇÃO DE HISTÓRICO INTELIGENTE:
+                // Se temos um histórico local mais recente ou completo que a nuvem, preservamos o local
+                // Isso evita que o delay da sincronização apague o histórico recém-criado
+                if (localItem && localItem.history && localItem.history.length > 0) {
+                    if (!cloudItem.history || cloudItem.history.length < localItem.history.length) {
+                        cloudItem.history = localItem.history;
+                    } else if (cloudItem.history && cloudItem.history.length > 0) {
+                        // Se ambos têm histórico, pegamos o que tem a data mais recente no topo
+                        const localDate = new Date(localItem.history[0].date).getTime();
+                        const cloudDate = new Date(cloudItem.history[0].date).getTime();
+                        if (localDate > cloudDate) {
+                            cloudItem.history = localItem.history;
+                        }
+                    }
+                }
+                
+                map.set(String(cloudItem.id), cloudItem);
+            });
             return Array.from(map.values()).sort((a, b) => b.id - a.id);
         }
 
@@ -1763,12 +1783,19 @@
                         const fieldsToCheck = ['farm', 'warehouse', 'owner', 'ticket', 'variety', 'team', 'obs', 'bruto', 'tara', 'desc', 'liquido', 'date', 'romaneio'];
                         
                         fieldsToCheck.forEach(field => {
-                            if (String(currentEntry[field]) !== String(updatedEntry[field])) {
-                                changes.push({
-                                    field: field,
-                                    old: currentEntry[field],
-                                    new: updatedEntry[field]
-                                });
+                            // Normalização rigorosa para comparação: remove espaços e trata nulos como string vazia
+                            const oldVal = currentEntry[field] !== null && currentEntry[field] !== undefined ? String(currentEntry[field]).trim() : '';
+                            const newVal = updatedEntry[field] !== null && updatedEntry[field] !== undefined ? String(updatedEntry[field]).trim() : '';
+                            
+                            // Ignora diferenças insignificantes (ex: "100.0" vs "100")
+                            const isNumber = !isNaN(parseFloat(oldVal)) && !isNaN(parseFloat(newVal));
+                            
+                            if (isNumber) {
+                                if (Math.abs(parseFloat(oldVal) - parseFloat(newVal)) > 0.01) {
+                                    changes.push({ field, old: currentEntry[field], new: updatedEntry[field] });
+                                }
+                            } else if (oldVal !== newVal) {
+                                changes.push({ field, old: currentEntry[field], new: updatedEntry[field] });
                             }
                         });
 
