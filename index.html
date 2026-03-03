@@ -1759,10 +1759,26 @@
                 importPreviewData.forEach(e => {
                     const parts = extractRomaneioParts(e.romaneio);
                     
-                    // Find any existing entry (real or placeholder) by romaneio parts
+                    // Find any existing entry (real or placeholder) by romaneio AND ticket parts
                     const existingIdx = db.entries.findIndex(entry => {
                         const entryParts = extractRomaneioParts(entry.romaneio);
-                        return parts.some(p => entryParts.includes(p));
+                        const romaneioMatch = parts.some(p => entryParts.includes(p));
+                        
+                        // If romaneio matches, we must also check ticket
+                        // If tickets are different, it's a DIFFERENT entry (multi-ticket romaneio)
+                        if (romaneioMatch) {
+                            // Normalize tickets for comparison
+                            const t1 = String(entry.ticket || '').replace(/\D/g, '');
+                            const t2 = String(e.ticket || '').replace(/\D/g, '');
+                            
+                            // If both have valid tickets and they are different, it's NOT a match (it's a new entry)
+                            if (t1 && t2 && t1 !== t2) return false;
+                            
+                            // If tickets match or one is missing, treat as same entry to update/fill
+                            return true;
+                        }
+                        
+                        return false;
                     });
 
                     if (existingIdx !== -1) {
@@ -2748,62 +2764,72 @@
             `;
             document.getElementById('romaneios-print-summary').innerHTML = printSummary;
 
-            body.innerHTML = filtered.sort((a,b) => new Date(b.date) - new Date(a.date)).map(e => {
-                const getViaButton = (type, value) => {
+            // Group filtered entries by Romaneio Number
+            const groupedEntries = {};
+            filtered.forEach(e => {
+                const romKey = extractRomaneioParts(e.romaneio)[0] || e.romaneio;
+                if (!groupedEntries[romKey]) groupedEntries[romKey] = [];
+                groupedEntries[romKey].push(e);
+            });
+
+            // Convert to array and sort by date of newest entry in group
+            const sortedGroups = Object.values(groupedEntries).sort((groupA, groupB) => {
+                const dateA = Math.max(...groupA.map(e => new Date(e.date).getTime()));
+                const dateB = Math.max(...groupB.map(e => new Date(e.date).getTime()));
+                return dateB - dateA;
+            });
+
+            body.innerHTML = sortedGroups.map(group => {
+                // Main entry is the first one, but we use it for shared fields
+                const mainEntry = group[0];
+                const isMulti = group.length > 1;
+                
+                // Calculate aggregated status for the group (if all complete, group is complete)
+                const isComplete = group.every(e => e.viaBranca === 5 && e.viaAzul === 5);
+                
+                // Helper to render buttons for a specific entry (or disabled/summary for group)
+                const getViaButton = (type, value, id) => {
                     let label = 'Pendente';
                     let colorClass = 'bg-slate-100 text-slate-400 hover:bg-amber-50';
                     let icon = 'circle';
                     
-                    if (value === 1) {
-                        label = 'Usina Cambuí';
-                        colorClass = 'bg-amber-100 text-amber-700 hover:bg-purple-50';
-                        icon = 'factory';
-                    } else if (value === 2) {
-                        label = 'Armazem Floresta';
-                        colorClass = 'bg-purple-100 text-purple-700 hover:bg-indigo-50';
-                        icon = 'building-2';
-                    } else if (value === 3) {
-                        label = 'Armazem Bom Jesus';
-                        colorClass = 'bg-indigo-100 text-indigo-700 hover:bg-green-50';
-                        icon = 'map-pin';
-                    } else if (value === 4) {
-                        label = 'Usina Vale';
-                        colorClass = 'bg-green-100 text-green-700 hover:bg-blue-50';
-                        icon = 'check-circle-2';
-                    } else if (value === 5) {
-                        label = 'Controladoria';
-                        colorClass = 'bg-blue-100 text-blue-700';
-                        icon = 'shield-check';
-                    }
+                    if (value === 1) { label = 'Usina Cambuí'; colorClass = 'bg-amber-100 text-amber-700 hover:bg-purple-50'; icon = 'factory'; }
+                    else if (value === 2) { label = 'Armazem Floresta'; colorClass = 'bg-purple-100 text-purple-700 hover:bg-indigo-50'; icon = 'building-2'; }
+                    else if (value === 3) { label = 'Armazem Bom Jesus'; colorClass = 'bg-indigo-100 text-indigo-700 hover:bg-green-50'; icon = 'map-pin'; }
+                    else if (value === 4) { label = 'Usina Vale'; colorClass = 'bg-green-100 text-green-700 hover:bg-blue-50'; icon = 'check-circle-2'; }
+                    else if (value === 5) { label = 'Controladoria'; colorClass = 'bg-blue-100 text-blue-700'; icon = 'shield-check'; }
                     
                     return `
-                        <button onclick="if(window.currentUserIsAdmin) cycleViaStatus(${e.id}, '${type}')" class="group relative inline-flex items-center gap-2 px-4 py-3 rounded-2xl transition-all ${colorClass} w-full justify-center border border-transparent ${window.currentUserIsAdmin ? 'hover:border-slate-200 cursor-pointer' : 'cursor-default'}">
-                            <i data-lucide="${icon}" size="16"></i>
-                            <span class="text-[10px] font-black uppercase tracking-widest">${label}</span>
+                        <button onclick="if(window.currentUserIsAdmin) cycleViaStatus(${id}, '${type}')" class="group relative inline-flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${colorClass} w-full justify-center border border-transparent ${window.currentUserIsAdmin ? 'hover:border-slate-200 cursor-pointer' : 'cursor-default'} shadow-sm">
+                            <i data-lucide="${icon}" size="12"></i>
+                            <span class="text-[9px] font-black uppercase tracking-widest truncate">${label}</span>
                         </button>
                     `;
                 };
 
-                const isComplete = e.viaBranca === 5 && e.viaAzul === 5;
-                const lastChange = e.history && e.history.length > 0 ? e.history[0] : null;
-                const isCreation = lastChange && lastChange.changes.some(c => c.field === 'creation');
-                const changeLabel = isCreation ? 'Novo' : 'Alt';
-                const changeColor = isCreation ? 'text-green-600' : 'text-amber-600';
-                const tooltipColor = isCreation ? 'text-green-400' : 'text-amber-400';
+                // Render rows for each ticket inside the romaneio group
+                const ticketRows = group.map((e, idx) => {
+                    const lastChange = e.history && e.history.length > 0 ? e.history[0] : null;
+                    const isCreation = lastChange && lastChange.changes.some(c => c.field === 'creation');
+                    const changeLabel = isCreation ? 'Novo' : 'Alt';
+                    const changeColor = isCreation ? 'text-green-600' : 'text-amber-600';
+                    const tooltipColor = isCreation ? 'text-green-400' : 'text-amber-400';
 
-                return `
-                    <tr class="hover:bg-slate-50 transition-colors" id="rom-row-${e.id}">
-                        <td class="px-8 py-6 relative group/cell">
-                            <div class="font-bold text-slate-700">${new Date(e.date).toLocaleDateString('pt-BR')}</div>
-                            <div class="text-xs text-blue-600 font-black tracking-tight">ROM: ${e.romaneio}</div>
-                            
-                            ${lastChange ? `
-                            <div class="mt-2 pt-2 border-t border-slate-100">
-                                <div class="flex items-center gap-1 text-[9px] ${changeColor} font-bold cursor-help group/hist relative">
+                    return `
+                        <div class="grid grid-cols-12 gap-4 items-center p-4 ${idx > 0 ? 'border-t border-slate-100' : ''} hover:bg-slate-50/50 transition-colors">
+                            <!-- Ticket & Date -->
+                            <div class="col-span-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="font-black text-slate-800 text-xs bg-slate-100 px-2 py-1 rounded-md">TK: ${e.ticket}</div>
+                                    <span class="text-[10px] text-slate-400 font-bold">${new Date(e.date).toLocaleDateString('pt-BR')}</span>
+                                </div>
+                                <div class="text-[10px] text-slate-500 font-bold uppercase mt-1 truncate" title="${e.owner}">${e.owner}</div>
+                                
+                                ${lastChange ? `
+                                <div class="mt-1 flex items-center gap-1 text-[9px] ${changeColor} font-bold cursor-help group/hist relative">
                                     <i data-lucide="${isCreation ? 'plus-circle' : 'history'}" size="10"></i>
                                     <span>${changeLabel}: ${new Date(lastChange.date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
                                     
-                                    <!-- Tooltip de Histórico -->
                                     <div class="absolute left-0 bottom-full mb-2 w-64 bg-slate-900 text-white text-[10px] p-3 rounded-xl shadow-2xl opacity-0 invisible group-hover/hist:opacity-100 group-hover/hist:visible transition-all z-50 pointer-events-none transform translate-y-2 group-hover/hist:translate-y-0">
                                         <div class="font-bold border-b border-slate-700 pb-2 mb-2 ${tooltipColor} flex justify-between items-center">
                                             <span>${isCreation ? 'Adicionado em' : 'Alterado em'} ${new Date(lastChange.date).toLocaleDateString('pt-BR')}</span>
@@ -2827,30 +2853,56 @@
                                         </div>
                                     </div>
                                 </div>
+                                ` : ''}
                             </div>
-                            ` : ''}
-                        </td>
-                        <td class="px-8 py-6">
-                            <div class="font-black text-slate-800 uppercase text-xs">
-                                ${e.farm === '---' ? '<span class="text-amber-500 italic">AGUARDANDO LANÇAMENTO</span>' : e.farm}
+
+                            <!-- Farm & Details -->
+                            <div class="col-span-3">
+                                <div class="font-black text-slate-800 uppercase text-xs truncate" title="${e.farm}">
+                                    ${e.farm === '---' ? '<span class="text-amber-500 italic">AGUARDANDO LANÇAMENTO</span>' : e.farm}
+                                </div>
+                                <div class="text-[9px] text-slate-400 font-bold uppercase truncate">${e.team} • ${e.warehouse}</div>
                             </div>
-                            <div class="text-[10px] text-slate-400 font-bold uppercase">${e.team}</div>
-                            ${e.warehouse && e.warehouse !== '---' ? `<div class="text-[9px] text-blue-500 font-black mt-1 uppercase"><i data-lucide="warehouse" class="inline-block mr-1" size="10"></i>${e.warehouse}</div>` : ''}
-                        </td>
-                        <td class="px-8 py-6 text-center w-64">
-                            ${getViaButton('viaBranca', e.viaBranca || 0)}
-                        </td>
-                        <td class="px-8 py-6 text-center w-64">
-                            ${getViaButton('viaAzul', e.viaAzul || 0)}
-                        </td>
-                        <td class="px-8 py-6 text-right">
-                            <div class="flex items-center justify-end gap-3">
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${isComplete ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'}">
-                                    ${isComplete ? 'Concluído' : 'Em Fluxo'}
-                                </span>
+
+                            <!-- Buttons -->
+                            <div class="col-span-2">
+                                ${getViaButton('viaBranca', e.viaBranca || 0, e.id)}
+                            </div>
+                            <div class="col-span-2">
+                                ${getViaButton('viaAzul', e.viaAzul || 0, e.id)}
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="col-span-2 flex justify-end gap-2">
                                 <button onclick="if(window.currentUserIsAdmin && confirm('Excluir este romaneio?')){ if(window.deleteEntryFromFirebase) window.deleteEntryFromFirebase(${e.id}); db.entries=db.entries.filter(x=>x.id!==${e.id}); saveToDB()}" class="p-2 text-slate-300 hover:text-red-500 transition-colors admin-only" title="Excluir">
                                     <i data-lucide="trash-2" size="14"></i>
                                 </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
+                        <td colspan="5" class="p-0">
+                            <div class="flex flex-col">
+                                <!-- Group Header (Romaneio Number) -->
+                                <div class="bg-slate-50/80 px-8 py-3 flex items-center justify-between border-b border-slate-100">
+                                    <div class="flex items-center gap-3">
+                                        <div class="text-sm text-blue-600 font-black tracking-tight">ROM: ${mainEntry.romaneio}</div>
+                                        ${isMulti ? `<span class="bg-blue-100 text-blue-700 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">${group.length} Tickets</span>` : ''}
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <span class="inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${isComplete ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'}">
+                                            ${isComplete ? 'Todos Concluídos' : 'Em Fluxo'}
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Tickets List -->
+                                <div class="bg-white">
+                                    ${ticketRows}
+                                </div>
                             </div>
                         </td>
                     </tr>
