@@ -12,6 +12,8 @@
     <script src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
     <!-- SheetJS para leitura de Excel -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -569,6 +571,58 @@
             <!-- DASHBOARD -->
             <section id="tab-dashboard" class="space-y-8">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="dashboard-stats"></div>
+                
+                <!-- Advanced Charts Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Chart 1: Produção por Fazenda -->
+                    <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-black text-slate-800 flex items-center gap-2">
+                                <i data-lucide="bar-chart-3" class="text-blue-600"></i>Produção por Fazenda (T)
+                            </h3>
+                        </div>
+                        <div class="h-[300px] relative">
+                            <canvas id="chart-production-farm"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 2: Evolução da Colheita -->
+                    <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-black text-slate-800 flex items-center gap-2">
+                                <i data-lucide="trending-up" class="text-indigo-600"></i>Evolução Diária (Sacos)
+                            </h3>
+                        </div>
+                        <div class="h-[300px] relative">
+                            <canvas id="chart-harvest-evolution"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 3: Distribuição por Variedade -->
+                    <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-black text-slate-800 flex items-center gap-2">
+                                <i data-lucide="pie-chart" class="text-purple-600"></i>Variedades Cultivadas
+                            </h3>
+                        </div>
+                        <div class="h-[300px] relative flex justify-center">
+                            <canvas id="chart-variety-distribution"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 4: Status das Vias -->
+                    <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-black text-slate-800 flex items-center gap-2">
+                                <i data-lucide="activity" class="text-emerald-600"></i>Fluxo de Documentação
+                            </h3>
+                        </div>
+                        <div class="h-[300px] relative">
+                            <canvas id="chart-vias-status"></canvas>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-8 border-b border-slate-50 flex items-center justify-between">
                         <h2 class="text-xl font-black text-slate-800 flex items-center gap-2">Performance por Variedade</h2>
@@ -3019,6 +3073,8 @@
             cycleViaStatus(id, type);
         }
 
+        let charts = {};
+
         function renderDashboard() {
             const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
             const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
@@ -3029,17 +3085,161 @@
             console.log("Dashboard Totals - Total Kg:", totalKg, "Total Sacos:", totalSacks);
 
             document.getElementById('dashboard-stats').innerHTML = `
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Produção Total</p><h4 class="text-2xl font-black">${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4></div>
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Total Sacos</p><h4 class="text-2xl font-black">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</h4></div>
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Produtividade Média</p><h4 class="text-2xl font-black">${avgProd.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4></div>
-                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100"><p class="text-[10px] font-black text-slate-400 uppercase">Área Mapeada</p><h4 class="text-2xl font-black">${totalArea.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Há</h4></div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 group hover:border-blue-200 transition-colors">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produção Total</p>
+                    <h4 class="text-2xl font-black text-slate-800">${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4>
+                    <div class="mt-2 flex items-center gap-1 text-[9px] text-blue-600 font-bold">
+                        <i data-lucide="trending-up" size="10"></i> Safra 25/26
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 group hover:border-indigo-200 transition-colors">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Sacos</p>
+                    <h4 class="text-2xl font-black text-slate-800">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</h4>
+                    <p class="text-[9px] text-indigo-500 font-bold mt-2 italic">Padronizado 60kg</p>
+                </div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 group hover:border-purple-200 transition-colors">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produtividade Média</p>
+                    <h4 class="text-2xl font-black text-slate-800">${avgProd.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</h4>
+                    <p class="text-[9px] text-purple-500 font-bold mt-2">Sacos por Hectare</p>
+                </div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 group hover:border-emerald-200 transition-colors">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Área Mapeada</p>
+                    <h4 class="text-2xl font-black text-slate-800">${totalArea.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Há</h4>
+                    <p class="text-[9px] text-emerald-500 font-bold mt-2">${db.farmAreas.length} Fazendas Ativas</p>
+                </div>
             `;
 
             const groups = {};
-            realEntries.forEach(e => { const k = `${e.farm}-${e.variety}`; groups[k] = (groups[k] || 0) + e.liquido; });
+            realEntries.forEach(e => { 
+                const k = `${e.farm}-${e.variety}`; 
+                groups[k] = (groups[k] || 0) + e.liquido; 
+            });
+            
             document.getElementById('dashboard-table-body').innerHTML = Object.entries(groups).map(([k, v]) => `
-                <tr class="hover:bg-slate-50"><td class="px-8 py-6 font-black">${k.split('-')[0]}</td><td class="px-8 py-6"><span class="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold">${k.split('-')[1]}</span></td><td class="px-8 py-6 text-right font-bold">${(v/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td><td class="px-8 py-6 text-right font-black">${(v/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td></tr>
+                <tr class="hover:bg-slate-50 transition-colors group">
+                    <td class="px-8 py-6 font-black text-slate-700">${k.split('-')[0]}</td>
+                    <td class="px-8 py-6">
+                        <span class="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter group-hover:bg-blue-100 group-hover:text-blue-700 transition-colors">${k.split('-')[1]}</span>
+                    </td>
+                    <td class="px-8 py-6 text-right font-bold text-slate-600">${(v/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                    <td class="px-8 py-6 text-right font-black text-slate-800">${(v/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} sc</td>
+                </tr>
             `).join('') || '<tr><td colspan="4" class="py-12 text-center text-slate-300">Vazio</td></tr>';
+
+            // ATUALIZAR GRÁFICOS
+            updateDashboardCharts(realEntries);
+            lucide.createIcons();
+        }
+
+        function updateDashboardCharts(entries) {
+            // 1. Produção por Fazenda (Bar Chart)
+            const farmData = {};
+            entries.forEach(e => {
+                farmData[e.farm] = (farmData[e.farm] || 0) + (e.liquido / 1000);
+            });
+            const sortedFarms = Object.entries(farmData).sort((a,b) => b[1] - a[1]).slice(0, 8);
+            
+            renderChart('chart-production-farm', 'bar', {
+                labels: sortedFarms.map(f => f[0]),
+                datasets: [{
+                    label: 'Toneladas',
+                    data: sortedFarms.map(f => f[1]),
+                    backgroundColor: 'rgba(37, 99, 235, 0.8)',
+                    borderRadius: 8,
+                    borderSkipped: false
+                }]
+            }, {
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } }
+            });
+
+            // 2. Evolução Diária (Line Chart)
+            const dailyData = {};
+            entries.forEach(e => {
+                const date = e.date;
+                dailyData[date] = (dailyData[date] || 0) + (e.liquido / 60);
+            });
+            const sortedDates = Object.keys(dailyData).sort();
+            
+            renderChart('chart-harvest-evolution', 'line', {
+                labels: sortedDates.map(d => d.split('-').reverse().slice(0,2).join('/')),
+                datasets: [{
+                    label: 'Sacos por Dia',
+                    data: sortedDates.map(d => dailyData[d]),
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#fff',
+                    pointBorderWidth: 2
+                }]
+            }, {
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true }, x: { grid: { display: false } } }
+            });
+
+            // 3. Distribuição por Variedade (Doughnut Chart)
+            const varietyData = {};
+            entries.forEach(e => {
+                varietyData[e.variety] = (varietyData[e.variety] || 0) + e.liquido;
+            });
+            const topVarieties = Object.entries(varietyData).sort((a,b) => b[1] - a[1]).slice(0, 5);
+
+            renderChart('chart-variety-distribution', 'doughnut', {
+                labels: topVarieties.map(v => v[0]),
+                datasets: [{
+                    data: topVarieties.map(v => v[1]),
+                    backgroundColor: ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'],
+                    borderWidth: 0,
+                    hoverOffset: 10
+                }]
+            }, {
+                plugins: {
+                    legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: { size: 10, weight: 'bold' } } }
+                },
+                cutout: '70%'
+            });
+
+            // 4. Fluxo de Documentação (Horizontal Bar)
+            const stats = {
+                'Pendente': db.entries.filter(e => e.viaBranca === 0 || e.viaAzul === 0).length,
+                'Cambuí': db.entries.filter(e => e.viaBranca === 1 && e.viaAzul === 1).length,
+                'Armazém': db.entries.filter(e => (e.viaBranca >= 2 && e.viaBranca <= 4) || (e.viaAzul >= 2 && e.viaAzul <= 4)).length,
+                'Concluído': db.entries.filter(e => e.viaBranca === 5 && e.viaAzul === 5).length
+            };
+
+            renderChart('chart-vias-status', 'bar', {
+                labels: Object.keys(stats),
+                datasets: [{
+                    data: Object.values(stats),
+                    backgroundColor: ['#94a3b8', '#fbbf24', '#818cf8', '#10b981'],
+                    borderRadius: 10
+                }]
+            }, {
+                indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: { x: { beginAtZero: true, grid: { display: false } }, y: { grid: { display: false } } }
+            });
+        }
+
+        function renderChart(id, type, data, options) {
+            if (charts[id]) {
+                charts[id].data = data;
+                charts[id].options = { ...charts[id].options, ...options };
+                charts[id].update();
+            } else {
+                const ctx = document.getElementById(id).getContext('2d');
+                charts[id] = new Chart(ctx, {
+                    type: type,
+                    data: data,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        ...options
+                    }
+                });
+            }
         }
 
         function renderDeposits() {
