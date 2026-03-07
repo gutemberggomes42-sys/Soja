@@ -12,6 +12,9 @@
     <script src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
     <!-- SheetJS para leitura de Excel -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- PDF.js para leitura de PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
@@ -1169,30 +1172,82 @@
 
                 <!-- RELATÓRIO: Depositário Soja -->
                 <div id="section-rep-depositary" class="hidden space-y-8">
-                    <!-- Configuração de Metas -->
-                    <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden p-8 print:hidden">
-                        <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 mb-6 border-b border-slate-50 pb-4">
-                            <i data-lucide="settings" class="text-blue-600"></i>Configurar Metas de Depositário
-                        </h3>
-                        <form onsubmit="handleDepositTargetSubmit(event)" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div class="space-y-1">
-                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depositário</label>
-                                <input type="text" id="target-owner" list="list-owners-target" placeholder="Nome..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
-                                <datalist id="list-owners-target"></datalist>
+                    <!-- Configuração de Metas e Importação -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
+                        <!-- Importação Inteligente de Metas -->
+                        <div class="lg:col-span-1 bg-gradient-to-br from-indigo-600 to-blue-700 p-8 rounded-[2rem] shadow-xl text-white relative overflow-hidden group">
+                            <i data-lucide="file-spreadsheet" class="absolute -right-4 -top-4 text-white/10 group-hover:scale-110 transition-transform" size="120"></i>
+                            <h3 class="text-lg font-black mb-2 flex items-center gap-2"><i data-lucide="file-up"></i>Importar Metas</h3>
+                            <p class="text-xs text-blue-100 mb-6 font-medium leading-relaxed">Importe metas de Excel, PDF ou Foto. O sistema reconhece os depositários e quantidades automaticamente.</p>
+                            
+                            <label class="cursor-pointer bg-white text-blue-700 px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-blue-50 transition-all active:scale-95 shadow-lg shadow-blue-900/20">
+                                <i data-lucide="upload"></i>ESCOLHER ARQUIVO
+                                <input type="file" id="file-upload-depositary" accept="image/*, .xlsx, .xls, .pdf" class="hidden" onchange="handleDepositaryFileImport(this)">
+                            </label>
+                            
+                            <div id="import-loader-dep" class="hidden mt-4 space-y-2">
+                                <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                                    <span id="import-status-dep">Processando...</span>
+                                    <span id="import-progress-dep">0%</span>
+                                </div>
+                                <div class="w-full bg-blue-900/30 h-1.5 rounded-full overflow-hidden">
+                                    <div id="import-bar-dep" class="bg-white h-full transition-all duration-300" style="width: 0%"></div>
+                                </div>
                             </div>
-                            <div class="space-y-1">
-                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazém</label>
-                                <input type="text" id="target-warehouse" list="list-warehouses-target" placeholder="Local..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
-                                <datalist id="list-warehouses-target"></datalist>
+                        </div>
+
+                        <!-- Configuração de Metas Manual -->
+                        <div class="lg:col-span-2 bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8">
+                            <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 mb-6 border-b border-slate-50 pb-4">
+                                <i data-lucide="settings" class="text-blue-600"></i>Configurar Metas Manualmente
+                            </h3>
+                            <form onsubmit="handleDepositTargetSubmit(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depositário</label>
+                                    <input type="text" id="target-owner" list="list-owners-target" placeholder="Nome..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                                    <datalist id="list-owners-target"></datalist>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazém</label>
+                                    <input type="text" id="target-warehouse" list="list-warehouses-target" placeholder="Local..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                                    <datalist id="list-warehouses-target"></datalist>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total a Pagar (Sacos)</label>
+                                    <input type="number" step="0.01" id="target-sacks" placeholder="Qtd..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                                </div>
+                                <div class="md:col-span-3">
+                                    <button type="submit" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">DEFINIR META</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- PREVIEW IMPORTAÇÃO DEPOSITÁRIO -->
+                    <div id="import-preview-section-dep" class="hidden bg-indigo-50 rounded-[2rem] border-2 border-indigo-200 shadow-lg overflow-hidden print:hidden">
+                        <div class="p-6 border-b border-indigo-200 flex items-center justify-between bg-indigo-100/50">
+                            <div>
+                                <h3 class="font-black text-indigo-900 flex items-center gap-2"><i data-lucide="eye"></i>Conferir Metas Importadas</h3>
+                                <p class="text-xs text-indigo-700 font-bold uppercase tracking-wider">Verifique os dados antes de salvar no sistema</p>
                             </div>
-                            <div class="space-y-1">
-                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total a Pagar (Sacos)</label>
-                                <input type="number" step="0.01" id="target-sacks" placeholder="Qtd..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                            <div class="flex gap-2">
+                                <button onclick="clearDepositaryImportPreview()" class="px-4 py-2 bg-white text-slate-600 rounded-xl text-xs font-black hover:bg-slate-100 border border-slate-200">CANCELAR</button>
+                                <button onclick="saveBulkDepositaryTargets()" class="px-6 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700 shadow-lg shadow-indigo-100">CONFIRMAR TUDO</button>
                             </div>
-                            <div class="flex items-end">
-                                <button type="submit" class="w-full py-3.5 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">DEFINIR META</button>
-                            </div>
-                        </form>
+                        </div>
+                        <div class="overflow-x-auto max-h-[400px]">
+                            <table class="w-full text-left text-[11px]">
+                                <thead class="sticky top-0 bg-indigo-50 border-b border-indigo-200">
+                                    <tr class="text-indigo-900/50 font-black uppercase tracking-widest">
+                                        <th class="px-4 py-3">Proprietário (Depositário)</th>
+                                        <th class="px-4 py-3">Empresa (Armazém)</th>
+                                        <th class="px-4 py-3 text-right">Total a Pagar (Sacos)</th>
+                                        <th class="px-4 py-3"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="import-preview-body-dep" class="divide-y divide-indigo-100"></tbody>
+                            </table>
+                        </div>
                     </div>
 
                     <div class="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
@@ -1622,6 +1677,235 @@
             }
             input.value = '';
         }
+
+        // --- NOVAS FUNÇÕES DE IMPORTAÇÃO DE DEPOSITÁRIO ---
+        let importPreviewDataDep = [];
+
+        async function handleDepositaryFileImport(input) {
+            if (!input.files || !input.files[0]) return;
+            const file = input.files[0];
+            const loader = document.getElementById('import-loader-dep');
+            const statusText = document.getElementById('import-status-dep');
+            const progressBar = document.getElementById('import-bar-dep');
+            
+            loader.classList.remove('hidden');
+            progressBar.style.width = '0%';
+            document.getElementById('import-progress-dep').innerText = '0%';
+
+            try {
+                if (file.name.match(/\.(xlsx|xls)$/)) {
+                    statusText.innerText = 'Lendo Excel...';
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const json = XLSX.utils.sheet_to_json(firstSheet);
+                        processDepositaryExcel(json);
+                        loader.classList.add('hidden');
+                    };
+                    reader.readAsArrayBuffer(file);
+                } else if (file.name.match(/\.pdf$/)) {
+                    statusText.innerText = 'Lendo PDF...';
+                    await processDepositaryPDF(file);
+                    loader.classList.add('hidden');
+                } else {
+                    statusText.innerText = 'Lendo Imagem (IA)...';
+                    const result = await Tesseract.recognize(file, 'por', { 
+                        logger: m => {
+                            if (m.status === 'recognizing text') {
+                                const p = Math.round(m.progress * 100);
+                                document.getElementById('import-progress-dep').innerText = p + '%';
+                                progressBar.style.width = p + '%';
+                            }
+                        }
+                    });
+                    processDepositaryOCR(result.data.text);
+                    loader.classList.add('hidden');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Erro na leitura do arquivo: ' + err.message);
+                loader.classList.add('hidden');
+            }
+            input.value = '';
+        }
+
+        async function processDepositaryPDF(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += pageText + '\n';
+                
+                const p = Math.round((i / pdf.numPages) * 100);
+                document.getElementById('import-progress-dep').innerText = p + '%';
+                document.getElementById('import-bar-dep').style.width = p + '%';
+            }
+            
+            processDepositaryOCR(fullText);
+        }
+
+        function processDepositaryExcel(rows) {
+            importPreviewDataDep = rows.map(row => {
+                const findCol = (keys) => {
+                    const found = Object.keys(row).find(k => keys.some(key => k.trim().toUpperCase() === key.toUpperCase()));
+                    return found ? row[found] : null;
+                };
+
+                const owner = findCol(['Proprietário', 'PROPRIETÁRIOS', 'PROPRIETÁRIO', 'NOME', 'DONO']) || '---';
+                const warehouse = findCol(['Empresa', 'EMPRESA', 'ARMAZÉM', 'LOCAL', 'DESTINO']) || '---';
+                const sacks = cleanNum(findCol(['Total a Pagar', 'TOTAL A PAGAR', 'SACOS', 'QUANTIDADE', 'VALOR']));
+
+                return {
+                    id: Date.now() + Math.random(),
+                    owner: String(owner).trim(),
+                    warehouse: String(warehouse).trim(),
+                    sacks: sacks
+                };
+            }).filter(item => item.sacks > 0 && item.owner !== '---');
+            
+            renderDepositaryImportPreview();
+        }
+
+        function processDepositaryOCR(text) {
+            console.log("Depositary OCR RAW:", text);
+            const lines = text.split('\n').filter(l => l.trim().length > 10);
+            const results = [];
+            
+            lines.forEach(line => {
+                const upperLine = line.toUpperCase();
+                
+                // Pula linhas que parecem ser cabeçalhos ou rodapés
+                if (upperLine.includes('CONTROLE DE PAGAMENTO') || upperLine.includes('PROPRIETÁRIOS') || upperLine.includes('SOJA PRODUTO')) {
+                    return;
+                }
+
+                // Tenta encontrar um nome (início da linha até o primeiro número ou CPF)
+                // O CPF geralmente tem o formato XXX.XXX.XXX-XX ou XXXXXXXXXXX
+                const cpfMatch = line.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
+                let owner = '---';
+                let remainingLine = line;
+
+                if (cpfMatch) {
+                    const cpfIndex = line.indexOf(cpfMatch[0]);
+                    owner = line.substring(0, cpfIndex).trim();
+                    remainingLine = line.substring(cpfIndex + cpfMatch[0].length);
+                } else {
+                    // Se não achou CPF, tenta pegar as primeiras palavras que não sejam números
+                    const firstNumMatch = line.match(/\d/);
+                    if (firstNumMatch) {
+                        owner = line.substring(0, firstNumMatch.index).trim();
+                        remainingLine = line.substring(firstNumMatch.index);
+                    }
+                }
+
+                // Tenta encontrar a Empresa (Warehouse)
+                // No formato da imagem, a empresa está no final: "COMIGO SHEGO", "CARAMURU LAGOA"
+                const warehouses = ["COMIGO", "CARAMURU", "VALE", "CAMBUI", "FLORESTA", "BOM JESUS", "LAGOA", "SHEGO"];
+                let warehouse = '---';
+                warehouses.forEach(w => {
+                    if (upperLine.includes(w)) {
+                        // Tenta pegar a expressão completa (ex: COMIGO SHEGO)
+                        const idx = upperLine.indexOf(w);
+                        const possibleWarehouse = line.substring(idx).trim().split('  ')[0]; // Pega até o próximo espaço duplo ou fim
+                        warehouse = possibleWarehouse;
+                    }
+                });
+
+                // Tenta encontrar o valor (Sacos)
+                // No formato da imagem, o "Total a Pagar" está antes da empresa
+                const nums = remainingLine.match(/\d{1,3}(\.?\d{3})*(,\d+)?/g) || [];
+                const cleanNums = nums.map(n => cleanNum(n));
+                
+                // O valor costuma ser o maior número na linha após o CPF/IE
+                const sacks = cleanNums.length > 0 ? Math.max(...cleanNums) : 0;
+
+                if (owner.length > 3 && sacks > 0) {
+                    results.push({
+                        id: Date.now() + Math.random(),
+                        owner: owner,
+                        warehouse: warehouse,
+                        sacks: sacks
+                    });
+                }
+            });
+
+            importPreviewDataDep = results;
+            renderDepositaryImportPreview();
+        }
+
+        function renderDepositaryImportPreview() {
+            const section = document.getElementById('import-preview-section-dep');
+            const body = document.getElementById('import-preview-body-dep');
+            
+            if (importPreviewDataDep.length === 0) {
+                section.classList.add('hidden');
+                return;
+            }
+
+            section.classList.remove('hidden');
+            body.innerHTML = importPreviewDataDep.map(item => `
+                <tr class="hover:bg-indigo-100/30 transition-colors">
+                    <td class="px-4 py-3 font-bold text-slate-700">${item.owner}</td>
+                    <td class="px-4 py-3 font-medium text-slate-500">${item.warehouse}</td>
+                    <td class="px-4 py-3 text-right font-black text-indigo-600">${item.sacks.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                    <td class="px-4 py-3 text-right">
+                        <button onclick="removeDepositaryImportItem(${item.id})" class="p-2 text-red-400 hover:text-red-600 transition-colors">
+                            <i data-lucide="trash-2" size="14"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function removeDepositaryImportItem(id) {
+            importPreviewDataDep = importPreviewDataDep.filter(i => i.id !== id);
+            renderDepositaryImportPreview();
+        }
+
+        function clearDepositaryImportPreview() {
+            importPreviewDataDep = [];
+            renderDepositaryImportPreview();
+        }
+
+        async function saveBulkDepositaryTargets() {
+            if (!window.currentUserIsAdmin) return alert('Acesso negado.');
+            
+            importPreviewDataDep.forEach(item => {
+                const existingIdx = db.depositaryTargets.findIndex(t => 
+                    removeAccents(t.owner).toUpperCase() === removeAccents(item.owner).toUpperCase() && 
+                    removeAccents(t.warehouse).toUpperCase() === removeAccents(item.warehouse).toUpperCase()
+                );
+                
+                if (existingIdx !== -1) {
+                    db.depositaryTargets[existingIdx].sacks = item.sacks;
+                } else {
+                    db.depositaryTargets.push({
+                        owner: item.owner,
+                        warehouse: item.warehouse,
+                        sacks: item.sacks
+                    });
+                }
+            });
+
+            if (window.saveSettingsToFirebase) {
+                await window.saveSettingsToFirebase('depositaryTargets', db.depositaryTargets);
+            }
+            
+            saveToDB();
+            clearDepositaryImportPreview();
+            renderDeposits();
+            renderReports();
+            alert('Metas importadas e salvas com sucesso!');
+        }
+
+        // --- FIM DAS FUNÇÕES DE IMPORTAÇÃO DE DEPOSITÁRIO ---
 
         function processImportedJSON(rows) {
             importPreviewData = rows.map(row => {
