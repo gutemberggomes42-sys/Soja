@@ -556,6 +556,9 @@
             <button onclick="switchTab('reports')" id="btn-reports" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
                 <i data-lucide="bar-chart-3" class="inline-block mr-2" size="18"></i>Relatórios
             </button>
+            <button onclick="switchTab('reconciliation')" id="btn-reconciliation" class="pb-4 text-sm font-bold uppercase tracking-widest transition-all tab-inactive">
+                <i data-lucide="check-square" class="inline-block mr-2" size="18"></i>Conferência
+            </button>
         </nav>
 
         <main>
@@ -1289,6 +1292,97 @@
                     </div>
                 </div>
             </section>
+            <!-- RECONCILIATION -->
+            <section id="tab-reconciliation" class="hidden space-y-8">
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                    <!-- Importação de Extrato do Armazém -->
+                    <div class="lg:col-span-1 space-y-6">
+                        <div class="bg-gradient-to-br from-emerald-600 to-teal-700 p-8 rounded-[2rem] shadow-xl text-white relative overflow-hidden group">
+                            <i data-lucide="file-check" class="absolute -right-4 -top-4 text-white/10 group-hover:scale-110 transition-transform" size="120"></i>
+                            <h3 class="text-lg font-black mb-2 flex items-center gap-2"><i data-lucide="file-up"></i>Extrato do Armazém</h3>
+                            <p class="text-xs text-emerald-100 mb-6 font-medium leading-relaxed">Importe o extrato de movimentação de pesagem (COMIGO). O sistema comparará automaticamente com os lançamentos da fazenda.</p>
+                            
+                            <label class="cursor-pointer bg-white text-emerald-700 px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-emerald-50 transition-all active:scale-95 shadow-lg shadow-emerald-900/20">
+                                <i data-lucide="upload"></i>ESCOLHER ARQUIVO
+                                <input type="file" id="file-upload-reconciliation" accept="image/*, .xlsx, .xls, .pdf" class="hidden" onchange="handleReconciliationImport(this)">
+                            </label>
+                            
+                            <div id="import-loader-rec" class="hidden mt-4 space-y-2">
+                                <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                                    <span id="import-status-rec">Processando...</span>
+                                    <span id="import-progress-rec">0%</span>
+                                </div>
+                                <div class="w-full bg-emerald-900/30 h-1.5 rounded-full overflow-hidden">
+                                    <div id="import-bar-rec" class="bg-white h-full transition-all duration-300" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Resumo da Conferência -->
+                        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                            <h4 class="text-xs font-black text-slate-400 uppercase tracking-widest">Resumo da Conferência</h4>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="bg-emerald-50 p-3 rounded-2xl">
+                                    <p class="text-[8px] font-black text-emerald-600 uppercase">Batendo</p>
+                                    <p id="rec-stat-matched" class="text-xl font-black text-emerald-700">0</p>
+                                </div>
+                                <div class="bg-amber-50 p-3 rounded-2xl">
+                                    <p class="text-[8px] font-black text-amber-600 uppercase">Divergente</p>
+                                    <p id="rec-stat-diff" class="text-xl font-black text-amber-700">0</p>
+                                </div>
+                                <div class="bg-red-50 p-3 rounded-2xl">
+                                    <p class="text-[8px] font-black text-red-600 uppercase">Ausente</p>
+                                    <p id="rec-stat-missing" class="text-xl font-black text-red-700">0</p>
+                                </div>
+                                <div class="bg-blue-50 p-3 rounded-2xl">
+                                    <p class="text-[8px] font-black text-blue-600 uppercase">Total Arq.</p>
+                                    <p id="rec-stat-total" class="text-xl font-black text-blue-700">0</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela de Comparação -->
+                    <div class="lg:col-span-3">
+                        <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                            <div class="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/20">
+                                <div>
+                                    <h2 class="text-xl font-black text-slate-800 flex items-center gap-2">
+                                        <i data-lucide="check-square" class="text-emerald-600"></i>Conferência de Cargas
+                                    </h2>
+                                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Comparação: Extrato Armazém vs Lançamentos Fazenda</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="saveReconciliationData()" id="btn-save-rec" class="hidden px-6 py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100">
+                                        SALVAR REGISTROS AUSENTES
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm">
+                                    <thead>
+                                        <tr class="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase tracking-widest border-b border-slate-50">
+                                            <th class="px-6 py-4">Ticket</th>
+                                            <th class="px-6 py-4">Data</th>
+                                            <th class="px-6 py-4">Placa / Motorista</th>
+                                            <th class="px-6 py-4 text-right">Peso Armazém</th>
+                                            <th class="px-6 py-4 text-right">Peso Fazenda</th>
+                                            <th class="px-6 py-4 text-center">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="reconciliation-table-body" class="divide-y divide-slate-50">
+                                        <tr>
+                                            <td colspan="6" class="px-8 py-20 text-center text-slate-400 font-medium italic">
+                                                Importe um extrato para iniciar a conferência.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -1676,6 +1770,268 @@
                 finally { loader.classList.add('hidden'); }
             }
             input.value = '';
+        }
+
+        // --- NOVAS FUNÇÕES DE IMPORTAÇÃO DE DEPOSITÁRIO ---
+        let importPreviewDataDep = [];
+
+        // --- FUNÇÕES DE CONFERÊNCIA DO ARMAZÉM ---
+        let reconciliationResults = [];
+
+        async function handleReconciliationImport(input) {
+            if (!input.files || !input.files[0]) return;
+            const file = input.files[0];
+            const loader = document.getElementById('import-loader-rec');
+            const statusText = document.getElementById('import-status-rec');
+            const progressBar = document.getElementById('import-bar-rec');
+            
+            loader.classList.remove('hidden');
+            progressBar.style.width = '0%';
+            document.getElementById('import-progress-rec').innerText = '0%';
+
+            try {
+                if (file.name.match(/\.(xlsx|xls)$/)) {
+                    statusText.innerText = 'Lendo Excel...';
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const json = XLSX.utils.sheet_to_json(firstSheet);
+                        processReconciliationExcel(json);
+                        loader.classList.add('hidden');
+                    };
+                    reader.readAsArrayBuffer(file);
+                } else if (file.name.match(/\.pdf$/)) {
+                    statusText.innerText = 'Lendo PDF...';
+                    await processReconciliationPDF(file);
+                    loader.classList.add('hidden');
+                } else {
+                    statusText.innerText = 'Lendo Imagem (IA)...';
+                    const result = await Tesseract.recognize(file, 'por', { 
+                        logger: m => {
+                            if (m.status === 'recognizing text') {
+                                const p = Math.round(m.progress * 100);
+                                document.getElementById('import-progress-rec').innerText = p + '%';
+                                progressBar.style.width = p + '%';
+                            }
+                        }
+                    });
+                    processReconciliationOCR(result.data.text);
+                    loader.classList.add('hidden');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Erro na leitura do arquivo: ' + err.message);
+                loader.classList.add('hidden');
+            }
+            input.value = '';
+        }
+
+        async function processReconciliationPDF(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += pageText + '\n';
+                const p = Math.round((i / pdf.numPages) * 100);
+                document.getElementById('import-progress-rec').innerText = p + '%';
+                document.getElementById('import-bar-rec').style.width = p + '%';
+            }
+            processReconciliationOCR(fullText);
+        }
+
+        function processReconciliationExcel(rows) {
+            const parsedData = rows.map(row => {
+                const findCol = (keys) => {
+                    const found = Object.keys(row).find(k => keys.some(key => k.trim().toUpperCase() === key.toUpperCase()));
+                    return found ? row[found] : null;
+                };
+
+                return {
+                    date: parseExcelDate(findCol(['Data/Hora', 'DATA', 'DATA HORA'])) || '---',
+                    ticket: String(findCol(['Ticket', 'TICKET', 'Nº TICKET']) || '---'),
+                    romaneio: String(findCol(['R.P', 'ROMANEIO', 'CONTROLE']) || '---'),
+                    plate: String(findCol(['Placa', 'PLACA']) || '---'),
+                    driver: findCol(['Motorista', 'MOTORISTA']) || '---',
+                    weightBruto: cleanNum(findCol(['Peso Bruto', 'BRUTO'])),
+                    weightTara: cleanNum(findCol(['Tara', 'TARA'])),
+                    weightLiquido: cleanNum(findCol(['Peso Líq', 'LIQUIDO', 'P. LIQ'])),
+                    variety: findCol(['Produto', 'PRODUTO']) || 'SOJA'
+                };
+            }).filter(item => item.ticket !== '---' && item.weightLiquido > 0);
+            
+            compareAndRenderReconciliation(parsedData);
+        }
+
+        function processReconciliationOCR(text) {
+            console.log("Reconciliation OCR RAW:", text);
+            const lines = text.split('\n').filter(l => l.trim().length > 20);
+            const parsedData = [];
+
+            lines.forEach(line => {
+                const upperLine = line.toUpperCase();
+                // Tenta encontrar Ticket (geralmente 6 dígitos) e pesos
+                const nums = line.match(/\d{1,3}(\.?\d{3})*(,\d+)?/g) || [];
+                const cleanNums = nums.map(n => cleanNum(n));
+
+                // Formato COMIGO: Data Ticket R.P Placa Motorista ... Peso Bruto Tara Desc Peso Liq
+                // Geralmente o ticket é o primeiro número longo ou após a data
+                const ticketMatch = line.match(/\b\d{6}\b/);
+                const ticket = ticketMatch ? ticketMatch[0] : '---';
+
+                if (ticket !== '---' && cleanNums.length >= 4) {
+                    // Pega os últimos pesos da linha
+                    const weightLiquido = cleanNums[cleanNums.length - 1];
+                    const weightTara = cleanNums[cleanNums.length - 3];
+                    const weightBruto = cleanNums[cleanNums.length - 4];
+
+                    parsedData.push({
+                        date: line.substring(0, 10), // Simplificado
+                        ticket: ticket,
+                        romaneio: '---', // Difícil pegar via regex simples sem posição fixa
+                        plate: '---',
+                        driver: '---',
+                        weightBruto,
+                        weightTara,
+                        weightLiquido,
+                        variety: 'SOJA'
+                    });
+                }
+            });
+
+            compareAndRenderReconciliation(parsedData);
+        }
+
+        function compareAndRenderReconciliation(warehouseData) {
+            reconciliationResults = warehouseData.map(w => {
+                // Busca nos lançamentos da fazenda pelo TICKET primeiro, depois ROMANEIO
+                const farmEntry = db.entries.find(e => 
+                    (e.ticket !== '---' && e.ticket === w.ticket) || 
+                    (e.romaneio !== '---' && extractRomaneioParts(e.romaneio).includes(w.romaneio))
+                );
+
+                let status = 'missing'; // ausente no sistema
+                let farmWeight = 0;
+
+                if (farmEntry) {
+                    farmWeight = farmEntry.liquido;
+                    // Margem de erro de 1kg
+                    status = Math.abs(farmWeight - w.weightLiquido) <= 1 ? 'matched' : 'diff';
+                }
+
+                return { ...w, farmEntry, farmWeight, status };
+            });
+
+            renderReconciliation();
+        }
+
+        function renderReconciliation() {
+            const body = document.getElementById('reconciliation-table-body');
+            const stats = { matched: 0, diff: 0, missing: 0 };
+
+            if (reconciliationResults.length === 0) {
+                body.innerHTML = `<tr><td colspan="6" class="px-8 py-20 text-center text-slate-400 font-medium italic">Nenhum dado encontrado no extrato.</td></tr>`;
+                return;
+            }
+
+            body.innerHTML = reconciliationResults.map(res => {
+                stats[res.status]++;
+                
+                let statusBadge = '';
+                if (res.status === 'matched') {
+                    statusBadge = '<span class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase">BATENDO</span>';
+                } else if (res.status === 'diff') {
+                    statusBadge = '<span class="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-black uppercase">DIVERGENTE</span>';
+                } else {
+                    statusBadge = '<span class="px-3 py-1 bg-red-100 text-red-700 rounded-full text-[10px] font-black uppercase">AUSENTE</span>';
+                }
+
+                return `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4 font-black text-slate-700">${res.ticket}</td>
+                        <td class="px-6 py-4 text-xs font-bold text-slate-500">${res.date}</td>
+                        <td class="px-6 py-4">
+                            <p class="text-xs font-black text-slate-700">${res.plate || '---'}</p>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">${res.driver || '---'}</p>
+                        </td>
+                        <td class="px-6 py-4 text-right font-black text-slate-700">${res.weightLiquido.toLocaleString('pt-BR')} kg</td>
+                        <td class="px-6 py-4 text-right font-black ${res.status === 'diff' ? 'text-amber-600' : 'text-slate-400'}">
+                            ${res.farmWeight > 0 ? res.farmWeight.toLocaleString('pt-BR') + ' kg' : '---'}
+                        </td>
+                        <td class="px-6 py-4 text-center">${statusBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            document.getElementById('rec-stat-matched').innerText = stats.matched;
+            document.getElementById('rec-stat-diff').innerText = stats.diff;
+            document.getElementById('rec-stat-missing').innerText = stats.missing;
+            document.getElementById('rec-stat-total').innerText = reconciliationResults.length;
+
+            // Mostra botão de salvar se houver ausentes
+            const btnSave = document.getElementById('btn-save-rec');
+            if (stats.missing > 0 || stats.diff > 0) {
+                btnSave.classList.remove('hidden');
+            } else {
+                btnSave.classList.add('hidden');
+            }
+            
+            lucide.createIcons();
+        }
+
+        async function saveReconciliationData() {
+            if (!window.currentUserIsAdmin) return alert('Acesso negado.');
+            
+            const missingOrDiff = reconciliationResults.filter(r => r.status === 'missing' || r.status === 'diff');
+            if (missingOrDiff.length === 0) return;
+
+            if (!confirm(`Deseja atualizar/adicionar ${missingOrDiff.length} registros no sistema baseados no extrato do armazém?`)) return;
+
+            for (const item of missingOrDiff) {
+                if (item.status === 'missing') {
+                    // Cria novo registro
+                    const newEntry = {
+                        id: Date.now() + Math.random(),
+                        date: item.date.includes('/') ? item.date.split('/').reverse().join('-') : item.date,
+                        farm: '---', // Precisará ser preenchido manualmente depois
+                        warehouse: 'COMIGO',
+                        owner: '---',
+                        ticket: item.ticket,
+                        romaneio: item.romaneio !== '---' ? item.romaneio : '---',
+                        variety: item.variety.includes('SOJA') ? 'SOJA' : item.variety,
+                        team: '---',
+                        obs: 'Importado via Conferência Armazém',
+                        bruto: item.weightBruto,
+                        tara: item.weightTara,
+                        desc: item.weightBruto - item.weightTara - item.weightLiquido,
+                        liquido: item.weightLiquido,
+                        viaBranca: false,
+                        viaAzul: false
+                    };
+                    db.entries.push(newEntry);
+                    if (window.saveEntryToFirebase) await window.saveEntryToFirebase(newEntry);
+                } else if (item.status === 'diff' && item.farmEntry) {
+                    // Atualiza registro existente
+                    const entryIdx = db.entries.findIndex(e => e.id === item.farmEntry.id);
+                    if (entryIdx !== -1) {
+                        db.entries[entryIdx].liquido = item.weightLiquido;
+                        db.entries[entryIdx].bruto = item.weightBruto;
+                        db.entries[entryIdx].tara = item.weightTara;
+                        db.entries[entryIdx].obs += ' (Peso ajustado via Conferência)';
+                        if (window.saveEntryToFirebase) await window.saveEntryToFirebase(db.entries[entryIdx]);
+                    }
+                }
+            }
+
+            saveToDB();
+            renderAll();
+            alert('Registros processados com sucesso!');
+            reconciliationResults = [];
+            renderReconciliation();
         }
 
         // --- NOVAS FUNÇÕES DE IMPORTAÇÃO DE DEPOSITÁRIO ---
