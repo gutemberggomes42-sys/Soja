@@ -2850,13 +2850,18 @@
                         const updatedEntry = {
                             ...currentEntry, 
                             ...importData,   
-                            viaBranca: Math.max(currentEntry.viaBranca || 0, e.viaBranca || 0),
-                            viaAzul: Math.max(currentEntry.viaAzul || 0, e.viaAzul || 0)
+                            viaBranca: e.viaBranca !== undefined && e.viaBranca !== false ? e.viaBranca : (currentEntry.viaBranca || 0),
+                            viaAzul: e.viaAzul !== undefined && e.viaAzul !== false ? e.viaAzul : (currentEntry.viaAzul || 0)
                         };
 
+                        // Se a importação for via Excel/OCR e não trouxer status (false), 
+                        // mantemos o status atual. Mas se trouxer um status real (número), usamos ele.
+                        // Para forçar o reset para pendente via importação, a lógica anterior (Math.max) era o problema.
+                        // Agora, se o usuário quiser resetar, ele pode importar com 0.
+                        
                         // Check for changes
                         const changes = [];
-                        const fieldsToCheck = ['farm', 'warehouse', 'owner', 'ticket', 'variety', 'team', 'obs', 'bruto', 'tara', 'desc', 'liquido', 'date', 'romaneio'];
+                        const fieldsToCheck = ['farm', 'warehouse', 'owner', 'ticket', 'variety', 'team', 'obs', 'bruto', 'tara', 'desc', 'liquido', 'date', 'romaneio', 'viaBranca', 'viaAzul'];
                         
                         fieldsToCheck.forEach(field => {
                             // Normalização rigorosa para comparação: remove espaços e trata nulos como string vazia
@@ -3308,25 +3313,28 @@
                     removeAccents(e.warehouse || '').toUpperCase().includes(romFilter);
                 
                 let matchesStatus = true;
+                const vB = (e.viaBranca === false || e.viaBranca === undefined || e.viaBranca === null) ? 0 : Number(e.viaBranca);
+                const vA = (e.viaAzul === false || e.viaAzul === undefined || e.viaAzul === null) ? 0 : Number(e.viaAzul);
+
                 if (statusFilter === 'pending') {
-                    matchesStatus = (e.viaBranca === 0 || e.viaAzul === 0);
+                    matchesStatus = (vB === 0 || vA === 0);
                 } else if (statusFilter === 'cambui') {
-                    matchesStatus = (e.viaBranca === 1 && e.viaAzul === 1);
+                    matchesStatus = (vB === 1 && vA === 1);
                 } else if (statusFilter === 'complete') {
-                    matchesStatus = (e.viaBranca === 5 && e.viaAzul === 5);
+                    matchesStatus = (vB === 5 && vA === 5);
                 }
 
                 let matchesLocation = true;
                 if (locationFilter === 'cambui') {
-                    matchesLocation = (e.viaBranca === 1 && e.viaAzul === 1);
+                    matchesLocation = (vB === 1 && vA === 1);
                 } else if (locationFilter === 'floresta') {
-                    matchesLocation = (e.viaBranca === 2 || e.viaAzul === 2);
+                    matchesLocation = (vB === 2 || vA === 2);
                 } else if (locationFilter === 'panorama') {
-                    matchesLocation = (e.viaBranca === 3 || e.viaAzul === 3);
+                    matchesLocation = (vB === 3 || vA === 3);
                 } else if (locationFilter === 'vale') {
-                    matchesLocation = (e.viaBranca === 4 || e.viaAzul === 4);
+                    matchesLocation = (vB === 4 || vA === 4);
                 } else if (locationFilter === 'controladoria') {
-                    matchesLocation = (e.viaBranca === 5 || e.viaAzul === 5);
+                    matchesLocation = (vB === 5 || vA === 5);
                 }
 
                 return matchesSearch && matchesStatus && matchesLocation;
@@ -3804,14 +3812,19 @@
             });
 
             // Stats e Relatório Inteligente
-            // CORREÇÃO: Contagem de romaneios únicos em vez de tickets individuais
+            const ticketCount = filtered.length;
             const uniqueRomCount = Object.keys(groupedEntries).length;
-            document.getElementById('total-romaneios-count').innerText = uniqueRomCount;
+            
+            // Exibe contagem detalhada no cabeçalho
+            document.getElementById('total-romaneios-count').innerText = `${uniqueRomCount} Romaneios (${ticketCount} Cargas)`;
             
             // Contagem por estado: 0: Pendente, 1: Usina Cambuí, 2: Armazem Floresta, 3: Armazem Bom Jesus, 4: Usina Vale, 5: Controladoria
             const getDetailedStats = (state) => db.entries.reduce((acc, e) => {
-                if (e.viaBranca === state) acc.branca++;
-                if (e.viaAzul === state) acc.azul++;
+                const vB = (e.viaBranca === false || e.viaBranca === undefined || e.viaBranca === null) ? 0 : Number(e.viaBranca);
+                const vA = (e.viaAzul === false || e.viaAzul === undefined || e.viaAzul === null) ? 0 : Number(e.viaAzul);
+                
+                if (vB === state) acc.branca++;
+                if (vA === state) acc.azul++;
                 return acc;
             }, { branca: 0, azul: 0 });
 
@@ -4208,17 +4221,18 @@
             });
 
             // 4. Fluxo de Documentação (Horizontal Bar)
-            const stats = {
-                'Pendente': db.entries.filter(e => e.viaBranca === 0 || e.viaAzul === 0).length,
-                'Cambuí': db.entries.filter(e => e.viaBranca === 1 && e.viaAzul === 1).length,
-                'Armazém': db.entries.filter(e => (e.viaBranca >= 2 && e.viaBranca <= 4) || (e.viaAzul >= 2 && e.viaAzul <= 4)).length,
-                'Concluído': db.entries.filter(e => e.viaBranca === 5 && e.viaAzul === 5).length
+            const getV = (val) => (val === false || val === undefined || val === null) ? 0 : Number(val);
+            const viasStats = {
+                'Pendente': db.entries.filter(e => getV(e.viaBranca) === 0 || getV(e.viaAzul) === 0).length,
+                'Cambuí': db.entries.filter(e => getV(e.viaBranca) === 1 && getV(e.viaAzul) === 1).length,
+                'Armazém': db.entries.filter(e => (getV(e.viaBranca) >= 2 && getV(e.viaBranca) <= 4) || (getV(e.viaAzul) >= 2 && getV(e.viaAzul) <= 4)).length,
+                'Concluído': db.entries.filter(e => getV(e.viaBranca) === 5 && getV(e.viaAzul) === 5).length
             };
 
             renderChart('chart-vias-status', 'bar', {
-                labels: Object.keys(stats),
+                labels: Object.keys(viasStats),
                 datasets: [{
-                    data: Object.values(stats),
+                    data: Object.values(viasStats),
                     backgroundColor: ['#94a3b8', '#fbbf24', '#818cf8', '#10b981'],
                     borderRadius: 10
                 }]
