@@ -101,7 +101,7 @@
                 setupRealtimeSync();
                 
                 // Limpa duplicados residuais
-                cleanupDuplicates();
+                if (window.cleanupDuplicates) window.cleanupDuplicates();
             } else {
                 loginScreen.classList.remove('hidden');
                 appContent.classList.add('hidden');
@@ -124,7 +124,7 @@
                     updateLocalAndRender();
                     
                     // Limpeza automática de duplicados residuais (sempre que sincronizar)
-                    if (window.currentUserIsAdmin) await cleanupDuplicates();
+                    if (window.currentUserIsAdmin && window.cleanupDuplicates) await window.cleanupDuplicates();
                 }
             });
 
@@ -145,6 +145,17 @@
                     const cloudTargets = doc.data().targets || [];
                     if (JSON.stringify(window.db.depositaryTargets) !== JSON.stringify(cloudTargets)) {
                         window.db.depositaryTargets = cloudTargets;
+                        updateLocalAndRender();
+                    }
+                }
+            });
+
+            // Sincroniza Conferências Salvas
+            onSnapshot(doc(firestore, "settings", "reconciliations"), (doc) => {
+                if (doc.exists() && window.db) {
+                    const cloudRecs = doc.data().data || [];
+                    if (JSON.stringify(window.db.reconciliations) !== JSON.stringify(cloudRecs)) {
+                        window.db.reconciliations = cloudRecs;
                         updateLocalAndRender();
                     }
                 }
@@ -187,15 +198,21 @@
 
         // Funções globais de salvamento otimizadas
         window.saveEntryToFirebase = async (entry) => {
-            if (!auth.currentUser) return;
+            if (!auth.currentUser) {
+                console.warn("Save attempted without authentication");
+                return;
+            }
             try {
                 const statusEl = document.getElementById('sync-status');
                 if (statusEl) statusEl.innerText = 'Sincronizando...';
                 // Salva documento individual usando ID como nome
                 await setDoc(doc(firestore, "harvest_entries", String(entry.id)), entry);
                 if (statusEl) statusEl.innerText = 'Sincronizado';
+                console.log(`Firebase Entry Saved: ${entry.id}`);
             } catch (e) {
                 console.error("Erro Firebase Entry:", e);
+                alert("Erro ao sincronizar carga no banco (Nuvem): " + e.message);
+                if (statusEl) statusEl.innerText = 'Erro na Nuvem';
             }
         };
 
@@ -211,11 +228,25 @@
         window.saveSettingsToFirebase = async (type, data) => {
             if (!auth.currentUser) return;
             try {
-                const docName = type === 'farmAreas' ? 'farm_areas' : 'depositary_targets';
-                const fieldName = type === 'farmAreas' ? 'areas' : 'targets';
-                await setDoc(doc(firestore, "settings", docName), { [fieldName]: data });
+                let docName, fieldName;
+                if (type === 'farmAreas') {
+                    docName = 'farm_areas';
+                    fieldName = 'areas';
+                } else if (type === 'depositaryTargets') {
+                    docName = 'depositary_targets';
+                    fieldName = 'targets';
+                } else if (type === 'reconciliations') {
+                    docName = 'reconciliations';
+                    fieldName = 'data';
+                }
+                
+                if (docName) {
+                    await setDoc(doc(firestore, "settings", docName), { [fieldName]: data });
+                    console.log(`Firebase Settings Saved: ${docName}`);
+                }
             } catch (e) {
                 console.error("Erro Firebase Settings:", e);
+                alert("Erro ao salvar no banco de dados (Nuvem): " + e.message);
             }
         };
 
@@ -1009,6 +1040,83 @@
             <!-- DEPOSITS -->
             <section id="tab-deposits" class="hidden space-y-8">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="deposit-summary"></div>
+                
+                <!-- NOVO: Importação e Configuração de Metas (Duplicado para facilidade de acesso) -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Importação Inteligente de Metas -->
+                    <div class="lg:col-span-1 bg-gradient-to-br from-indigo-600 to-blue-700 p-8 rounded-[2rem] shadow-xl text-white relative overflow-hidden group">
+                        <i data-lucide="file-spreadsheet" class="absolute -right-4 -top-4 text-white/10 group-hover:scale-110 transition-transform" size="120"></i>
+                        <h3 class="text-lg font-black mb-2 flex items-center gap-2"><i data-lucide="file-up"></i>Importar Metas</h3>
+                        <p class="text-xs text-blue-100 mb-6 font-medium leading-relaxed">Importe metas de Excel, PDF ou Foto do seu controle de pagamento.</p>
+                        
+                        <label class="cursor-pointer bg-white text-blue-700 px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-blue-50 transition-all active:scale-95 shadow-lg shadow-blue-900/20">
+                            <i data-lucide="upload"></i>ESCOLHER ARQUIVO
+                            <input type="file" id="file-upload-depositary-main" accept="image/*, .xlsx, .xls, .pdf" class="hidden" onchange="window.handleDepositaryFileImport(this)">
+                        </label>
+                        
+                        <div id="import-loader-dep-main" class="hidden mt-4 space-y-2">
+                            <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                                <span id="import-status-dep-main">Processando...</span>
+                                <span id="import-progress-dep-main">0%</span>
+                            </div>
+                            <div class="w-full bg-blue-900/30 h-1.5 rounded-full overflow-hidden">
+                                <div id="import-bar-dep-main" class="bg-white h-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Configuração de Metas Manual -->
+                    <div class="lg:col-span-2 bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8">
+                        <h3 class="text-xl font-black text-slate-800 flex items-center gap-2 mb-6 border-b border-slate-50 pb-4">
+                            <i data-lucide="settings" class="text-blue-600"></i>Configurar Metas Manualmente
+                        </h3>
+                        <form onsubmit="handleDepositTargetSubmit(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depositário</label>
+                                <input type="text" id="target-owner-main" list="list-owners-target" placeholder="Nome..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazém</label>
+                                <input type="text" id="target-warehouse-main" list="list-warehouses-target" placeholder="Local..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total a Pagar (Sacos)</label>
+                                <input type="number" step="0.01" id="target-sacks-main" placeholder="Qtd..." required class="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold">
+                            </div>
+                            <div class="md:col-span-3">
+                                <button type="submit" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">DEFINIR META</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- PREVIEW IMPORTAÇÃO DEPOSITÁRIO (Compartilhado) -->
+                <div id="import-preview-section-dep" class="hidden bg-indigo-50 rounded-[2rem] border-2 border-indigo-200 shadow-lg overflow-hidden print:hidden">
+                    <div class="p-6 border-b border-indigo-200 flex items-center justify-between bg-indigo-100/50">
+                        <div>
+                            <h3 class="font-black text-indigo-900 flex items-center gap-2"><i data-lucide="eye"></i>Conferir Metas Importadas</h3>
+                            <p class="text-xs text-indigo-700 font-bold uppercase tracking-wider">Verifique os dados antes de salvar no sistema</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="window.clearDepositaryImportPreview()" class="px-4 py-2 bg-white text-slate-600 rounded-xl text-xs font-black hover:bg-slate-100 border border-slate-200">CANCELAR</button>
+                            <button onclick="window.saveBulkDepositaryTargets()" class="px-6 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700 shadow-lg shadow-indigo-100">CONFIRMAR TUDO</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto max-h-[400px]">
+                        <table class="w-full text-left text-[11px]">
+                            <thead class="sticky top-0 bg-indigo-50 border-b border-indigo-200">
+                                <tr class="text-indigo-900/50 font-black uppercase tracking-widest">
+                                    <th class="px-4 py-3">Proprietário (Depositário)</th>
+                                    <th class="px-4 py-3">Empresa (Armazém)</th>
+                                    <th class="px-4 py-3 text-right">Total a Pagar (Sacos)</th>
+                                    <th class="px-4 py-3"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="import-preview-body-dep" class="divide-y divide-indigo-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-8 border-b border-slate-50">
                         <h2 class="text-xl font-black text-slate-800 flex items-center gap-2"><i data-lucide="user-check" class="text-blue-600"></i>Saldos por Depositário</h2>
@@ -1340,6 +1448,16 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Histórico de Conferências -->
+                        <div class="bg-slate-900/5 p-6 rounded-3xl border border-slate-200/50 space-y-4">
+                            <h4 class="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                <i data-lucide="history" size="14"></i> Conferências Salvas
+                            </h4>
+                            <div id="saved-reconciliations-list" class="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                                <!-- Gerado via JS -->
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Tabela de Comparação -->
@@ -1354,7 +1472,7 @@
                                 </div>
                                 <div class="flex gap-2">
                                     <button onclick="saveReconciliationData()" id="btn-save-rec" class="hidden px-6 py-3 bg-emerald-600 text-white rounded-2xl font-black text-xs hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100">
-                                        SALVAR REGISTROS AUSENTES
+                                        SALVAR CONFERÊNCIA
                                     </button>
                                 </div>
                             </div>
@@ -1600,26 +1718,25 @@
             db.farmAreas = Object.entries(oldAreas).map(([farm, area]) => ({ farm, variety: 'Todas', area }));
         }
         if (!db.depositaryTargets) db.depositaryTargets = [];
+        if (!db.savedReconciliations) db.reconciliations = []; // Fallback para versões anteriores
+        if (!db.reconciliations) db.reconciliations = [];
 
         let importPreviewData = [];
 
         // Helper global para remover acentos
-        const removeAccents = (str) => {
+        window.removeAccents = (str) => {
             if (!str) return '';
             return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         };
 
         // Helper para extrair partes de um romaneio (ex: "16051 / 16052" -> ["16051", "16052"])
-        const extractRomaneioParts = (str) => {
+        window.extractRomaneioParts = (str) => {
             if (!str) return [];
-            // Remove qualquer caractere que não seja número ou letra, exceto separadores comuns
-            // e então quebra em partes. Converte tudo para string e limpa espaços.
             return String(str)
                 .toUpperCase()
                 .split(/[\/\s\-\,]+/)
                 .map(s => {
                     let clean = s.trim();
-                    // Se for apenas números, remove zeros à esquerda para garantir match (ex: 016005 -> 16005)
                     if (/^\d+$/.test(clean)) return String(Number(clean));
                     return clean;
                 })
@@ -1773,12 +1890,12 @@
         }
 
         // --- NOVAS FUNÇÕES DE IMPORTAÇÃO DE DEPOSITÁRIO ---
-        let importPreviewDataDep = [];
+        // let importPreviewDataDep = []; // Removido duplicata
 
         // --- FUNÇÕES DE CONFERÊNCIA DO ARMAZÉM ---
         let reconciliationResults = [];
 
-        async function handleReconciliationImport(input) {
+        window.handleReconciliationImport = async function(input) {
             if (!input.files || !input.files[0]) return;
             const file = input.files[0];
             const loader = document.getElementById('import-loader-rec');
@@ -1860,7 +1977,8 @@
                     weightBruto: cleanNum(findCol(['Peso Bruto', 'BRUTO'])),
                     weightTara: cleanNum(findCol(['Tara', 'TARA'])),
                     weightLiquido: cleanNum(findCol(['Peso Líq', 'LIQUIDO', 'P. LIQ'])),
-                    variety: findCol(['Produto', 'PRODUTO']) || 'SOJA'
+                    variety: findCol(['Produto', 'PRODUTO']) || 'SOJA',
+                    owner: String(findCol(['Proprietário', 'DONO', 'TRANSACIONADOR']) || '---')
                 };
             }).filter(item => item.ticket !== '---' && item.weightLiquido > 0);
             
@@ -1868,59 +1986,145 @@
         }
 
         function processReconciliationOCR(text) {
-            console.log("Reconciliation OCR RAW:", text);
-            const lines = text.split('\n').filter(l => l.trim().length > 20);
+            console.log("Reconciliation OCR RAW Processing (Final Logic)...");
+            
+            const cleanText = text.replace(/\|/g, ' ').replace(/\s\s+/g, ' ');
+            const dateRegex = /(\d{2}\/\d{2}\/\d{4})/g;
+            let match;
+            const recordStarts = [];
+            while ((match = dateRegex.exec(cleanText)) !== null) {
+                recordStarts.push(match.index);
+            }
+
             const parsedData = [];
-
-            lines.forEach(line => {
+            const knownOwners = [...new Set(db.entries.map(e => e.owner.toUpperCase()))].filter(o => o.length > 3 && o !== '---');
+            
+            for (let i = 0; i < recordStarts.length; i++) {
+                const start = recordStarts[i];
+                const end = recordStarts[i + 1] || cleanText.length;
+                const line = cleanText.substring(start, end).trim();
+                
                 const upperLine = line.toUpperCase();
-                // Tenta encontrar Ticket (geralmente 6 dígitos) e pesos
-                const nums = line.match(/\d{1,3}(\.?\d{3})*(,\d+)?/g) || [];
-                const cleanNums = nums.map(n => cleanNum(n));
+                if (upperLine.includes('TIPO DE PESAGEM') || upperLine.includes('PESO LÍQ')) continue;
 
-                // Formato COMIGO: Data Ticket R.P Placa Motorista ... Peso Bruto Tara Desc Peso Liq
-                // Geralmente o ticket é o primeiro número longo ou após a data
-                const ticketMatch = line.match(/\b\d{6}\b/);
-                const ticket = ticketMatch ? ticketMatch[0] : '---';
+                // 1. DATA
+                const dateMatch = line.match(/(\d{2}\/\d{2}\/\d{4})/);
+                if (!dateMatch) continue;
+                const date = dateMatch[0];
 
-                if (ticket !== '---' && cleanNums.length >= 4) {
-                    // Pega os últimos pesos da linha
-                    const weightLiquido = cleanNums[cleanNums.length - 1];
-                    const weightTara = cleanNums[cleanNums.length - 3];
-                    const weightBruto = cleanNums[cleanNums.length - 4];
-
-                    parsedData.push({
-                        date: line.substring(0, 10), // Simplificado
-                        ticket: ticket,
-                        romaneio: '---', // Difícil pegar via regex simples sem posição fixa
-                        plate: '---',
-                        driver: '---',
-                        weightBruto,
-                        weightTara,
-                        weightLiquido,
-                        variety: 'SOJA'
-                    });
+                // 2. TICKET e ROMANEIO (R.P)
+                // Procura por sequências de 5 ou 6 dígitos
+                const numSequences = line.match(/\b\d{5,6}\b/g) || [];
+                let ticket = '---';
+                let romaneio = '---';
+                
+                if (numSequences.length >= 2) {
+                    // No formato COMIGO, o Ticket vem primeiro, depois o RP
+                    ticket = numSequences[0];
+                    romaneio = numSequences[1];
+                } else if (numSequences.length === 1) {
+                    ticket = numSequences[0];
                 }
-            });
 
+                if (ticket === '---' && romaneio === '---') continue;
+
+                // 3. PESOS
+                const nums = line.match(/\d{1,3}(?:\.\d{3})*(?:,\d+)?/g) || [];
+                const cleanNums = nums.map(n => cleanNum(n)).filter(n => n > 500);
+
+                if (cleanNums.length >= 2) {
+                    const weightLiquido = cleanNums[cleanNums.length - 1];
+                    const weightBruto = Math.max(...cleanNums);
+                    // Tara geralmente entre 10k e 30k
+                    const weightTara = cleanNums.find(n => n >= 10000 && n <= 35000 && n !== weightBruto) || (weightBruto - weightLiquido);
+
+                    // 4. PLACA
+                    const plateMatch = line.match(/[A-Z]{3}-?\d[A-Z0-9]\d{2}/i) || line.match(/[A-Z]{3}-?\d{4}/i);
+                    const plate = plateMatch ? plateMatch[0].toUpperCase() : '---';
+
+                    // 5. PROPRIETÁRIO
+                    let owner = '---';
+                    
+                    // Tenta encontrar nos conhecidos primeiro
+                    for (const ko of knownOwners) {
+                        if (removeAccents(upperLine).includes(removeAccents(ko))) {
+                            owner = ko;
+                            break;
+                        }
+                    }
+                    
+                    if (owner === '---') {
+                        // Se não achou nos conhecidos, tenta encontrar padrões de nomes no texto
+                        // O nome do proprietário no extrato COMIGO geralmente vem após a placa ou motorista
+                        // Vamos pegar a parte mais longa da linha que não contenha números ou palavras-chave
+                        const parts = upperLine.split(/\s+/).filter(p => p.length > 2);
+                        const excluded = ['SOJA', 'COMIGO', 'DESCARGA', 'TICKET', 'BRUTO', 'TARA', 'LIQUIDO', 'DATA', 'PLACA', 'MOTORISTA', 'PRODUTO'];
+                        
+                        let possibleName = [];
+                        for (const p of parts) {
+                            if (!excluded.some(ex => p.includes(ex)) && !/\d/.test(p)) {
+                                possibleName.push(p);
+                            } else if (possibleName.length > 2) {
+                                break; // Já pegamos um nome provável
+                            } else {
+                                possibleName = []; // Reseta se encontrou algo que não é nome
+                            }
+                        }
+                        
+                        if (possibleName.length >= 2) {
+                            owner = possibleName.join(' ');
+                        }
+                    }
+
+                    if (weightLiquido > 1000) {
+                        parsedData.push({
+                            date, ticket, romaneio, plate, owner,
+                            weightBruto, weightTara, weightLiquido,
+                            variety: 'SOJA'
+                        });
+                    }
+                }
+            }
+
+            console.log("Parsed Data:", parsedData);
             compareAndRenderReconciliation(parsedData);
         }
 
         function compareAndRenderReconciliation(warehouseData) {
-            reconciliationResults = warehouseData.map(w => {
-                // Busca nos lançamentos da fazenda pelo TICKET primeiro, depois ROMANEIO
-                const farmEntry = db.entries.find(e => 
-                    (e.ticket !== '---' && e.ticket === w.ticket) || 
-                    (e.romaneio !== '---' && extractRomaneioParts(e.romaneio).includes(w.romaneio))
-                );
+            console.log("Matching Logic: Owner + Weight (Ignoring Ticket/RP)...");
+            
+            // Usaremos um set para evitar que um lançamento da fazenda dê match em dois registros do extrato
+            const matchedFarmEntryIds = new Set();
 
-                let status = 'missing'; // ausente no sistema
+            reconciliationResults = warehouseData.map(w => {
+                const fileOwner = removeAccents(w.owner.toUpperCase());
+                const weight = w.weightLiquido;
+                
+                // Busca nos lançamentos da fazenda pelo dono e peso (exato)
+                const farmEntry = db.entries.find(e => {
+                    if (matchedFarmEntryIds.has(e.id)) return false;
+                    if (e.farm === '---') return false; // Pula registros incompletos
+
+                    const eOwner = removeAccents(e.owner.toUpperCase());
+                    const eWeight = e.liquido;
+
+                    // Match por Proprietário (Dono)
+                    const ownerMatch = (fileOwner !== '---' && eOwner !== '---') && 
+                                     (eOwner.includes(fileOwner) || fileOwner.includes(eOwner));
+                    
+                    // Match por Peso Líquido (exato)
+                    const weightMatch = eWeight === weight;
+
+                    return ownerMatch && weightMatch;
+                });
+
+                let status = 'missing'; 
                 let farmWeight = 0;
 
                 if (farmEntry) {
+                    matchedFarmEntryIds.add(farmEntry.id);
                     farmWeight = farmEntry.liquido;
-                    // Margem de erro de 1kg
-                    status = Math.abs(farmWeight - w.weightLiquido) <= 1 ? 'matched' : 'diff';
+                    status = 'matched';
                 }
 
                 return { ...w, farmEntry, farmWeight, status };
@@ -1933,8 +2137,9 @@
             const body = document.getElementById('reconciliation-table-body');
             const stats = { matched: 0, diff: 0, missing: 0 };
 
-            if (reconciliationResults.length === 0) {
-                body.innerHTML = `<tr><td colspan="6" class="px-8 py-20 text-center text-slate-400 font-medium italic">Nenhum dado encontrado no extrato.</td></tr>`;
+            if (!body) return;
+            if (!reconciliationResults || reconciliationResults.length === 0) {
+                body.innerHTML = `<tr><td colspan="7" class="px-8 py-20 text-center text-slate-400 font-medium italic">Nenhum dado encontrado no extrato.</td></tr>`;
                 return;
             }
 
@@ -1952,15 +2157,19 @@
 
                 return `
                     <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="px-6 py-4 font-black text-slate-700">${res.ticket}</td>
+                        <td class="px-6 py-4 font-black text-slate-700">
+                            <span class="block">${res.ticket}</span>
+                            <span class="text-[9px] text-slate-400">RP: ${res.romaneio}</span>
+                        </td>
                         <td class="px-6 py-4 text-xs font-bold text-slate-500">${res.date}</td>
                         <td class="px-6 py-4">
-                            <p class="text-xs font-black text-slate-700">${res.plate || '---'}</p>
-                            <p class="text-[10px] font-bold text-slate-400 uppercase">${res.driver || '---'}</p>
+                            <span class="text-[10px] font-black text-blue-600 block">${res.owner}</span>
+                            <span class="text-[9px] text-slate-400 uppercase">${res.plate}</span>
                         </td>
                         <td class="px-6 py-4 text-right font-black text-slate-700">${res.weightLiquido.toLocaleString('pt-BR')} kg</td>
                         <td class="px-6 py-4 text-right font-black ${res.status === 'diff' ? 'text-amber-600' : 'text-slate-400'}">
                             ${res.farmWeight > 0 ? res.farmWeight.toLocaleString('pt-BR') + ' kg' : '---'}
+                            ${res.farmEntry ? `<div class="text-[9px] font-normal text-slate-400">Tkt Faz: ${res.farmEntry.ticket}</div>` : ''}
                         </td>
                         <td class="px-6 py-4 text-center">${statusBadge}</td>
                     </tr>
@@ -1972,81 +2181,130 @@
             document.getElementById('rec-stat-missing').innerText = stats.missing;
             document.getElementById('rec-stat-total').innerText = reconciliationResults.length;
 
-            // Mostra botão de salvar se houver ausentes
             const btnSave = document.getElementById('btn-save-rec');
-            if (stats.missing > 0 || stats.diff > 0) {
-                btnSave.classList.remove('hidden');
-            } else {
-                btnSave.classList.add('hidden');
+            if (btnSave) {
+                // Sempre permite salvar a conferência se houver resultados
+                if (reconciliationResults.length > 0) btnSave.classList.remove('hidden');
+                else btnSave.classList.add('hidden');
             }
             
-            lucide.createIcons();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         }
 
-        async function saveReconciliationData() {
+        window.saveReconciliationData = async function() {
             if (!window.currentUserIsAdmin) return alert('Acesso negado.');
-            
-            const missingOrDiff = reconciliationResults.filter(r => r.status === 'missing' || r.status === 'diff');
-            if (missingOrDiff.length === 0) return;
+            if (!reconciliationResults || reconciliationResults.length === 0) return;
 
-            if (!confirm(`Deseja atualizar/adicionar ${missingOrDiff.length} registros no sistema baseados no extrato do armazém?`)) return;
+            const name = prompt("Digite um nome para identificar esta conferência (Ex: Conferência Antonio Ribeiro):");
+            if (!name) return;
 
-            for (const item of missingOrDiff) {
-                if (item.status === 'missing') {
-                    // Cria novo registro
-                    const newEntry = {
-                        id: Date.now() + Math.random(),
-                        date: item.date.includes('/') ? item.date.split('/').reverse().join('-') : item.date,
-                        farm: '---', // Precisará ser preenchido manualmente depois
-                        warehouse: 'COMIGO',
-                        owner: '---',
-                        ticket: item.ticket,
-                        romaneio: item.romaneio !== '---' ? item.romaneio : '---',
-                        variety: item.variety.includes('SOJA') ? 'SOJA' : item.variety,
-                        team: '---',
-                        obs: 'Importado via Conferência Armazém',
-                        bruto: item.weightBruto,
-                        tara: item.weightTara,
-                        desc: item.weightBruto - item.weightTara - item.weightLiquido,
-                        liquido: item.weightLiquido,
-                        viaBranca: false,
-                        viaAzul: false
-                    };
-                    db.entries.push(newEntry);
-                    if (window.saveEntryToFirebase) await window.saveEntryToFirebase(newEntry);
-                } else if (item.status === 'diff' && item.farmEntry) {
-                    // Atualiza registro existente
-                    const entryIdx = db.entries.findIndex(e => e.id === item.farmEntry.id);
-                    if (entryIdx !== -1) {
-                        db.entries[entryIdx].liquido = item.weightLiquido;
-                        db.entries[entryIdx].bruto = item.weightBruto;
-                        db.entries[entryIdx].tara = item.weightTara;
-                        db.entries[entryIdx].obs += ' (Peso ajustado via Conferência)';
-                        if (window.saveEntryToFirebase) await window.saveEntryToFirebase(db.entries[entryIdx]);
-                    }
-                }
+            const stats = {
+                matched: parseInt(document.getElementById('rec-stat-matched').innerText),
+                diff: parseInt(document.getElementById('rec-stat-diff').innerText),
+                missing: parseInt(document.getElementById('rec-stat-missing').innerText),
+                total: reconciliationResults.length
+            };
+
+            const newRec = {
+                id: Date.now(),
+                name: name,
+                date: new Date().toISOString(),
+                data: JSON.parse(JSON.stringify(reconciliationResults)), // Deep copy dos resultados atuais
+                stats: stats
+            };
+
+            if (!db.reconciliations) db.reconciliations = [];
+            db.reconciliations.unshift(newRec); // Adiciona no topo
+
+            // Salva no Firestore se disponível
+            if (window.saveSettingsToFirebase) {
+                await window.saveSettingsToFirebase('reconciliations', db.reconciliations);
             }
 
             saveToDB();
-            renderAll();
-            alert('Registros processados com sucesso!');
-            reconciliationResults = [];
+            renderSavedReconciliations();
+            alert('Conferência salva com sucesso no histórico!');
+        }
+
+        function renderSavedReconciliations() {
+            const listEl = document.getElementById('saved-reconciliations-list');
+            if (!listEl) return;
+
+            if (!db.reconciliations || db.reconciliations.length === 0) {
+                listEl.innerHTML = `<div class="p-8 text-center text-slate-400 italic text-xs font-bold uppercase tracking-widest bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">Nenhuma conferência salva.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = db.reconciliations.map(rec => `
+                <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:border-blue-200 transition-all group">
+                    <div class="flex items-center justify-between mb-3">
+                        <h5 class="font-black text-slate-700 text-xs uppercase truncate flex-1 pr-2">${rec.name}</h5>
+                        <div class="flex gap-1">
+                            <button onclick="viewSavedReconciliation(${rec.id})" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Ver Detalhes">
+                                <i data-lucide="eye" size="14"></i>
+                            </button>
+                            <button onclick="deleteSavedReconciliation(${rec.id})" class="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors" title="Excluir">
+                                <i data-lucide="trash-2" size="14"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                        <span>${new Date(rec.date).toLocaleDateString('pt-BR')}</span>
+                        <div class="flex gap-2">
+                            <span class="text-emerald-600">${rec.stats.matched} OK</span>
+                            <span class="text-red-600">${rec.stats.missing} AUS</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        window.viewSavedReconciliation = function(id) {
+            const rec = db.reconciliations.find(r => r.id === id);
+            if (!rec) return;
+
+            reconciliationResults = JSON.parse(JSON.stringify(rec.data));
             renderReconciliation();
+            
+            // Atualiza os stats manualmente pois o renderReconciliation usa o DOM
+            document.getElementById('rec-stat-matched').innerText = rec.stats.matched;
+            document.getElementById('rec-stat-diff').innerText = rec.stats.diff;
+            document.getElementById('rec-stat-missing').innerText = rec.stats.missing;
+            document.getElementById('rec-stat-total').innerText = rec.stats.total;
+
+            alert(`Visualizando conferência: ${rec.name}`);
+        }
+
+        window.deleteSavedReconciliation = async function(id) {
+            if (!confirm('Deseja excluir esta conferência salva?')) return;
+            
+            db.reconciliations = db.reconciliations.filter(r => r.id !== id);
+            
+            if (window.saveSettingsToFirebase) {
+                await window.saveSettingsToFirebase('reconciliations', db.reconciliations);
+            }
+            
+            saveToDB();
+            renderSavedReconciliations();
         }
 
         // --- NOVAS FUNÇÕES DE IMPORTAÇÃO DE DEPOSITÁRIO ---
         let importPreviewDataDep = [];
 
-        async function handleDepositaryFileImport(input) {
+        window.handleDepositaryFileImport = async function(input) {
             if (!input.files || !input.files[0]) return;
             const file = input.files[0];
-            const loader = document.getElementById('import-loader-dep');
-            const statusText = document.getElementById('import-status-dep');
-            const progressBar = document.getElementById('import-bar-dep');
+            const isMain = input.id === 'file-upload-depositary-main';
+            const loader = document.getElementById(isMain ? 'import-loader-dep-main' : 'import-loader-dep');
+            const statusText = document.getElementById(isMain ? 'import-status-dep-main' : 'import-status-dep');
+            const progressBar = document.getElementById(isMain ? 'import-bar-dep-main' : 'import-bar-dep');
+            const progressText = document.getElementById(isMain ? 'import-progress-dep-main' : 'import-progress-dep');
             
             loader.classList.remove('hidden');
             progressBar.style.width = '0%';
-            document.getElementById('import-progress-dep').innerText = '0%';
+            progressText.innerText = '0%';
 
             try {
                 if (file.name.match(/\.(xlsx|xls)$/)) {
@@ -2063,7 +2321,7 @@
                     reader.readAsArrayBuffer(file);
                 } else if (file.name.match(/\.pdf$/)) {
                     statusText.innerText = 'Lendo PDF...';
-                    await processDepositaryPDF(file);
+                    await processDepositaryPDF(file, isMain);
                     loader.classList.add('hidden');
                 } else {
                     statusText.innerText = 'Lendo Imagem (IA)...';
@@ -2071,7 +2329,7 @@
                         logger: m => {
                             if (m.status === 'recognizing text') {
                                 const p = Math.round(m.progress * 100);
-                                document.getElementById('import-progress-dep').innerText = p + '%';
+                                progressText.innerText = p + '%';
                                 progressBar.style.width = p + '%';
                             }
                         }
@@ -2087,11 +2345,14 @@
             input.value = '';
         }
 
-        async function processDepositaryPDF(file) {
+        async function processDepositaryPDF(file, isMain = false) {
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             let fullText = '';
             
+            const progressText = document.getElementById(isMain ? 'import-progress-dep-main' : 'import-progress-dep');
+            const progressBar = document.getElementById(isMain ? 'import-bar-dep-main' : 'import-bar-dep');
+
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
@@ -2099,8 +2360,8 @@
                 fullText += pageText + '\n';
                 
                 const p = Math.round((i / pdf.numPages) * 100);
-                document.getElementById('import-progress-dep').innerText = p + '%';
-                document.getElementById('import-bar-dep').style.width = p + '%';
+                progressText.innerText = p + '%';
+                progressBar.style.width = p + '%';
             }
             
             processDepositaryOCR(fullText);
@@ -2129,70 +2390,128 @@
         }
 
         function processDepositaryOCR(text) {
-            console.log("Depositary OCR RAW:", text);
-            const lines = text.split('\n').filter(l => l.trim().length > 10);
+            console.log("--- INÍCIO PROCESSAMENTO OCR METAS (SMART AGGREGATION) ---");
+            const cleanRawText = removeAccents(text.toUpperCase());
             const results = [];
+            const warehouses = ["COMIGO", "CARAMURU", "VALE", "CAMBUI", "FLORESTA", "BOM JESUS", "LAGOA", "SHEGO", "CARGILL", "BUNGE", "COAMO", "AGROMEN"];
             
-            lines.forEach(line => {
-                const upperLine = line.toUpperCase();
+            // 1. Detecção de Formato SIAB (Extrato de Pesagem Detalhado)
+            // Agora removendo acentos para garantir que "MOVIMENTACAO" e "LIQUIDO" batam
+            if (cleanRawText.includes("EXTRATO DE MOVIMENTACAO DE PESAGEM") || 
+                cleanRawText.includes("PESO LIQ") || 
+                cleanRawText.includes("PESO LIQUIDO") ||
+                cleanRawText.includes("TRANSACIONADOR")) {
                 
-                // Pula linhas que parecem ser cabeçalhos ou rodapés
-                if (upperLine.includes('CONTROLE DE PAGAMENTO') || upperLine.includes('PROPRIETÁRIOS') || upperLine.includes('SOJA PRODUTO')) {
-                    return;
-                }
+                console.log("Formato SIAB/Extrato detectado. Agregando por Proprietário...");
+                
+                // Filtra apenas linhas que começam com data (padrão de extrato SIAB)
+                const lines = text.split('\n').filter(l => l.match(/\d{2}\/\d{2}\/\d{4}/));
+                const aggregation = {}; // { ownerName: { kg: 0, wh: '---' } }
 
-                // Tenta encontrar um nome (início da linha até o primeiro número ou CPF)
-                // O CPF geralmente tem o formato XXX.XXX.XXX-XX ou XXXXXXXXXXX
-                const cpfMatch = line.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
-                let owner = '---';
-                let remainingLine = line;
+                lines.forEach(line => {
+                    const upperLine = removeAccents(line.toUpperCase());
+                    if (upperLine.includes('TOTAL')) return;
 
-                if (cpfMatch) {
-                    const cpfIndex = line.indexOf(cpfMatch[0]);
-                    owner = line.substring(0, cpfIndex).trim();
-                    remainingLine = line.substring(cpfIndex + cpfMatch[0].length);
-                } else {
-                    // Se não achou CPF, tenta pegar as primeiras palavras que não sejam números
-                    const firstNumMatch = line.match(/\d/);
-                    if (firstNumMatch) {
-                        owner = line.substring(0, firstNumMatch.index).trim();
-                        remainingLine = line.substring(firstNumMatch.index);
+                    // Tenta extrair o Peso Líquido (último número da linha)
+                    const nums = line.match(/\d{1,3}(?:\.\d{3})*(?:,\d+)?/g) || [];
+                    if (nums.length < 5) return; 
+                    
+                    // No SIAB, o peso líquido é o último valor
+                    const weightKg = cleanNum(nums[nums.length - 1]);
+                    
+                    // Tenta extrair o Proprietário (Transacionador)
+                    let owner = '---';
+                    
+                    // Estratégia A: Busca por nomes já conhecidos no sistema
+                    const knownOwnersInDB = [...new Set(db.entries.map(e => e.owner.toUpperCase()))];
+                    for (const ko of knownOwnersInDB) {
+                        if (upperLine.includes(removeAccents(ko))) {
+                            owner = ko;
+                            break;
+                        }
                     }
-                }
 
-                // Tenta encontrar a Empresa (Warehouse)
-                // No formato da imagem, a empresa está no final: "COMIGO SHEGO", "CARAMURU LAGOA"
-                const warehouses = ["COMIGO", "CARAMURU", "VALE", "CAMBUI", "FLORESTA", "BOM JESUS", "LAGOA", "SHEGO"];
-                let warehouse = '---';
-                warehouses.forEach(w => {
-                    if (upperLine.includes(w)) {
-                        // Tenta pegar a expressão completa (ex: COMIGO SHEGO)
-                        const idx = upperLine.indexOf(w);
-                        const possibleWarehouse = line.substring(idx).trim().split('  ')[0]; // Pega até o próximo espaço duplo ou fim
-                        warehouse = possibleWarehouse;
+                    // Estratégia B: Se não achou, busca o texto antes de "SOJA"
+                    if (owner === '---') {
+                        const sojaIdx = upperLine.indexOf("SOJA");
+                        if (sojaIdx !== -1) {
+                            const preSoja = line.substring(0, sojaIdx).trim();
+                            const parts = preSoja.split(/\s{2,}/); // Divide por espaços duplos
+                            if (parts.length >= 2) {
+                                // O Transacionador costuma ser a última coluna antes do produto
+                                owner = parts[parts.length - 1].trim().toUpperCase();
+                            }
+                        }
+                    }
+
+                    if (owner !== '---' && weightKg > 0) {
+                        if (!aggregation[owner]) aggregation[owner] = { kg: 0, wh: '---' };
+                        aggregation[owner].kg += weightKg;
+                        
+                        // Detecta Warehouse para esse owner
+                        for (const w of warehouses) {
+                            if (cleanRawText.includes(w)) {
+                                aggregation[owner].wh = w;
+                                break;
+                            }
+                        }
                     }
                 });
 
-                // Tenta encontrar o valor (Sacos)
-                // No formato da imagem, o "Total a Pagar" está antes da empresa
-                const nums = remainingLine.match(/\d{1,3}(\.?\d{3})*(,\d+)?/g) || [];
-                const cleanNums = nums.map(n => cleanNum(n));
-                
-                // O valor costuma ser o maior número na linha após o CPF/IE
-                const sacks = cleanNums.length > 0 ? Math.max(...cleanNums) : 0;
-
-                if (owner.length > 3 && sacks > 0) {
+                // Converte a agregação para o formato de resultados (Metas em Sacos)
+                Object.keys(aggregation).forEach(owner => {
+                    const sacks = Math.round((aggregation[owner].kg / 60) * 10) / 10;
                     results.push({
                         id: Date.now() + Math.random(),
                         owner: owner,
-                        warehouse: warehouse,
+                        warehouse: aggregation[owner].wh,
                         sacks: sacks
                     });
-                }
-            });
+                });
 
+            } else {
+                // 2. Formato de Resumo (Owner | Sacks) - Lógica Brute Force Anterior
+                console.log("Formato de Resumo detectado...");
+                const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+                
+                lines.forEach(line => {
+                    const upper = line.toUpperCase();
+                    if (upper.includes('CONTROLE DE PAGAMENTO') || upper.includes('PROPRIETARIOS')) return;
+
+                    const numMatches = line.match(/\d{1,3}(?:\.\d{3})*(?:,\d+)?/g) || [];
+                    const cleanNums = numMatches.map(n => cleanNum(n));
+                    const valueCandidates = numMatches.map((raw, i) => {
+                        const clean = cleanNums[i];
+                        return (raw.replace(/\D/g, '').length < 9 && clean > 0) ? clean : 0;
+                    }).filter(n => n > 0);
+
+                    const sacks = valueCandidates.length > 0 ? Math.max(...valueCandidates) : 0;
+                    const blocks = line.split(/\s{2,}/).map(b => b.trim()).filter(b => b.length > 3);
+                    
+                    let owner = '---';
+                    const textBlocks = blocks.filter(b => {
+                        const u = b.toUpperCase();
+                        const hasTooManyDigits = (b.replace(/\D/g, '').length > 5);
+                        return !hasTooManyDigits && !u.includes('CONTROLE') && !u.includes('SOJA') && !warehouses.some(w => u.includes(w));
+                    });
+                    if (textBlocks.length > 0) owner = textBlocks.sort((a, b) => b.length - a.length)[0].toUpperCase();
+
+                    let warehouse = '---';
+                    for (const w of warehouses) { if (upper.includes(w)) { warehouse = w; break; } }
+
+                    if (owner !== '---' && sacks > 0) {
+                        results.push({ id: Date.now() + Math.random(), owner: owner, warehouse: warehouse, sacks: sacks });
+                    }
+                });
+            }
+
+            console.log("RESULTADO FINAL PROCESSADO:", results);
             importPreviewDataDep = results;
             renderDepositaryImportPreview();
+            
+            if (results.length === 0) {
+                alert("O sistema leu o arquivo mas não conseguiu identificar os nomes e valores. Verifique se a foto está nítida.");
+            }
         }
 
         function renderDepositaryImportPreview() {
@@ -2220,17 +2539,17 @@
             lucide.createIcons();
         }
 
-        function removeDepositaryImportItem(id) {
+        window.removeDepositaryImportItem = function(id) {
             importPreviewDataDep = importPreviewDataDep.filter(i => i.id !== id);
             renderDepositaryImportPreview();
         }
 
-        function clearDepositaryImportPreview() {
+        window.clearDepositaryImportPreview = function() {
             importPreviewDataDep = [];
             renderDepositaryImportPreview();
         }
 
-        async function saveBulkDepositaryTargets() {
+        window.saveBulkDepositaryTargets = async function() {
             if (!window.currentUserIsAdmin) return alert('Acesso negado.');
             
             importPreviewDataDep.forEach(item => {
@@ -2399,14 +2718,20 @@
         function cleanNum(val) {
             if (typeof val === 'number') return val;
             if (!val) return 0;
-            // Trata formatos brasileiros (1.234,56) e americanos (1,234.56)
             let s = String(val).trim();
+            
+            // Lógica aprimorada para o padrão brasileiro/agrícola
+            // Se tem vírgula, o ponto é milhar. Se não tem vírgula e tem ponto em posição de milhar, tratamos como milhar.
             if (s.includes(',') && s.includes('.')) {
                 if (s.indexOf('.') < s.indexOf(',')) s = s.replace(/\./g, '').replace(',', '.');
                 else s = s.replace(/,/g, '');
             } else if (s.includes(',')) {
                 s = s.replace(',', '.');
+            } else if (s.includes('.') && s.length >= 5) {
+                // Caso "61.270" -> Provavelmente milhar se não houver vírgula
+                s = s.replace(/\./g, '');
             }
+            
             return parseFloat(s) || 0;
         }
 
@@ -2753,7 +3078,7 @@
 
         // NAVIGATION & UI
         function switchTab(tabId) {
-            ['dashboard', 'harvest', 'romaneios', 'deposits', 'farms', 'reports'].forEach(t => {
+            ['dashboard', 'harvest', 'romaneios', 'deposits', 'farms', 'reports', 'reconciliation'].forEach(t => {
                 const section = document.getElementById(`tab-${t}`);
                 const btn = document.getElementById(`btn-${t}`);
                 
@@ -3005,7 +3330,11 @@
                 }
 
                 return matchesSearch && matchesStatus && matchesLocation;
-            }).sort((a,b) => a.romaneio.localeCompare(b.romaneio, undefined, {numeric: true}));
+            }).sort((a,b) => {
+                const romA = String(a.romaneio || '');
+                const romB = String(b.romaneio || '');
+                return romA.localeCompare(romB, undefined, {numeric: true});
+            });
 
             if (currentDeclarationEntries.length === 0) {
                 return alert('Nenhum romaneio filtrado para gerar a declaração.');
@@ -3196,12 +3525,19 @@
         function handleDepositTargetSubmit(e) {
             e.preventDefault();
             if (!window.currentUserIsAdmin) return alert('Acesso negado: Apenas o administrador pode realizar esta ação.');
-            const owner = document.getElementById('target-owner').value.trim();
-            const warehouse = document.getElementById('target-warehouse').value.trim();
-            const sacks = parseFloat(document.getElementById('target-sacks').value);
+            
+            // Tenta pegar de qualquer um dos formulários (Main ou Reports)
+            const owner = (document.getElementById('target-owner-main')?.value || document.getElementById('target-owner')?.value || '').trim();
+            const warehouse = (document.getElementById('target-warehouse-main')?.value || document.getElementById('target-warehouse')?.value || '').trim();
+            const sacksVal = document.getElementById('target-sacks-main')?.value || document.getElementById('target-sacks')?.value;
+            const sacks = parseFloat(sacksVal);
 
             if (owner && warehouse && !isNaN(sacks)) {
-                const existingIdx = db.depositaryTargets.findIndex(t => t.owner === owner && t.warehouse === warehouse);
+                const existingIdx = db.depositaryTargets.findIndex(t => 
+                    removeAccents(t.owner).toUpperCase() === removeAccents(owner).toUpperCase() && 
+                    removeAccents(t.warehouse).toUpperCase() === removeAccents(warehouse).toUpperCase()
+                );
+                
                 if (existingIdx !== -1) {
                     db.depositaryTargets[existingIdx].sacks = sacks;
                 } else {
@@ -3211,7 +3547,10 @@
                 // Sincroniza configurações
                 if (window.saveSettingsToFirebase) window.saveSettingsToFirebase('depositaryTargets', db.depositaryTargets);
                 
-                saveToDB(); e.target.reset();
+                saveToDB(); 
+                e.target.reset();
+                renderAll();
+                alert('Meta configurada com sucesso!');
             }
         }
 
@@ -3288,6 +3627,7 @@
             renderFarms(); 
             renderReports(); 
             renderDatalists(); 
+            renderSavedReconciliations();
             lucide.createIcons(); 
         }
 
@@ -3400,6 +3740,28 @@
             const statusFilter = document.getElementById('filter-rom-status')?.value || 'all';
             const locationFilter = document.getElementById('filter-rom-location')?.value || 'all';
 
+            // Mapeia todos os IDs de entradas que estão marcadas como "matched" em qualquer conferência salva
+            const matchedEntryIds = new Set();
+            if (db.reconciliations) {
+                db.reconciliations.forEach(rec => {
+                    if (rec.data) {
+                        rec.data.forEach(res => {
+                            if (res.status === 'matched' && res.farmEntry) {
+                                matchedEntryIds.add(res.farmEntry.id);
+                            }
+                        });
+                    }
+                });
+            }
+            // Adiciona também os da conferência atual (em memória)
+            if (typeof reconciliationResults !== 'undefined') {
+                reconciliationResults.forEach(res => {
+                    if (res.status === 'matched' && res.farmEntry) {
+                        matchedEntryIds.add(res.farmEntry.id);
+                    }
+                });
+            }
+
             const filtered = db.entries.filter(e => {
                 const matchesSearch = !romFilter || 
                     removeAccents(e.romaneio).toUpperCase().includes(romFilter) || 
@@ -3433,8 +3795,18 @@
                 return matchesSearch && matchesStatus && matchesLocation;
             });
 
+            // Group filtered entries by Romaneio Number
+            const groupedEntries = {};
+            filtered.forEach(e => {
+                const romKey = extractRomaneioParts(e.romaneio)[0] || e.romaneio;
+                if (!groupedEntries[romKey]) groupedEntries[romKey] = [];
+                groupedEntries[romKey].push(e);
+            });
+
             // Stats e Relatório Inteligente
-            document.getElementById('total-romaneios-count').innerText = db.entries.length;
+            // CORREÇÃO: Contagem de romaneios únicos em vez de tickets individuais
+            const uniqueRomCount = Object.keys(groupedEntries).length;
+            document.getElementById('total-romaneios-count').innerText = uniqueRomCount;
             
             // Contagem por estado: 0: Pendente, 1: Usina Cambuí, 2: Armazem Floresta, 3: Armazem Bom Jesus, 4: Usina Vale, 5: Controladoria
             const getDetailedStats = (state) => db.entries.reduce((acc, e) => {
@@ -3499,14 +3871,6 @@
             `;
             document.getElementById('romaneios-print-summary').innerHTML = printSummary;
 
-            // Group filtered entries by Romaneio Number
-            const groupedEntries = {};
-            filtered.forEach(e => {
-                const romKey = extractRomaneioParts(e.romaneio)[0] || e.romaneio;
-                if (!groupedEntries[romKey]) groupedEntries[romKey] = [];
-                groupedEntries[romKey].push(e);
-            });
-
             // Convert to array and sort by date of newest entry in group
             const sortedGroups = Object.values(groupedEntries).sort((groupA, groupB) => {
                 const dateA = Math.max(...groupA.map(e => new Date(e.date).getTime()));
@@ -3554,6 +3918,7 @@
                     const changeLabel = isCreation ? 'Novo' : 'Alt';
                     const changeColor = isCreation ? 'text-green-600' : 'text-amber-600';
                     const tooltipColor = isCreation ? 'text-green-400' : 'text-amber-400';
+                    const isConferido = matchedEntryIds.has(e.id);
 
                     return `
                         <div class="grid grid-cols-12 gap-4 items-center p-4 ${idx > 0 ? 'border-t border-slate-100' : ''} hover:bg-slate-50/50 transition-colors">
@@ -3562,6 +3927,7 @@
                                 <div class="flex items-center gap-2">
                                     <div class="font-black text-slate-800 text-xs bg-slate-100 px-2 py-1 rounded-md">TK: ${e.ticket}</div>
                                     <span class="text-[10px] text-slate-400 font-bold">${new Date(e.date).toLocaleDateString('pt-BR')}</span>
+                                    ${isConferido ? `<span class="bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-sm animate-pulse"><i data-lucide="check-check" size="8"></i>CONFERIDO</span>` : ''}
                                 </div>
                                 <div class="text-[10px] text-slate-500 font-bold uppercase mt-1 truncate" title="${e.owner}">${e.owner}</div>
                                 
@@ -4154,7 +4520,7 @@
                 
                 if (totalA > 0 && totalB === 0) return -1;
                 if (totalA === 0 && totalB > 0) return 1;
-                return a.localeCompare(b);
+                return String(a || '').localeCompare(String(b || ''));
             });
 
             let html = '';
@@ -4234,7 +4600,11 @@
             let totalDepKg = 0;
             let totalDepSacks = 0;
             let html = '';
-            Object.values(dataMap).sort((a,b) => a.owner.localeCompare(b.owner)).forEach(d => {
+            Object.values(dataMap).sort((a,b) => {
+                const nameA = String(a.owner || '').toUpperCase();
+                const nameB = String(b.owner || '').toUpperCase();
+                return nameA.localeCompare(nameB);
+            }).forEach(d => {
                 const targetT = (d.targetSacks * 60) / 1000;
                 const depT = d.depositedKg / 1000;
                 const depS = d.depositedKg / 60;
