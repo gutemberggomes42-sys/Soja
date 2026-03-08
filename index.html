@@ -2811,35 +2811,37 @@
                 importPreviewData.forEach(e => {
                     const parts = extractRomaneioParts(e.romaneio);
                     
-                    // Find any existing entry (real or placeholder) by romaneio AND ticket parts
-                    const existingIdx = db.entries.findIndex(entry => {
-                        const entryParts = extractRomaneioParts(entry.romaneio);
-                        const romaneioMatch = parts.some(p => entryParts.includes(p));
-                        
-                        // If romaneio matches, we must also check ticket
-                        // If tickets are different, it's a DIFFERENT entry (multi-ticket romaneio)
-                        if (romaneioMatch) {
-                            // Normalize tickets for comparison
-                            // Extract only numbers for comparison, but allow '---' or empty to match anything (to update placeholders)
-                            const t1Raw = String(entry.ticket || '').trim();
-                            const t2Raw = String(e.ticket || '').trim();
+                    // Ticket-first: impede duplicação de tickets mesmo com romaneio divergente
+                    const importTicketDigits = String(e.ticket || '').trim().replace(/\D/g, '');
+                    let existingIdx = -1;
+                    if (importTicketDigits && importTicketDigits.length >= 6) {
+                        existingIdx = db.entries.findIndex(entry => {
+                            const entryTicketDigits = String(entry.ticket || '').trim().replace(/\D/g, '');
+                            return entryTicketDigits && entryTicketDigits === importTicketDigits;
+                        });
+                    }
+                    
+                    // Fallback: busca por romaneio e ticket (com tolerância para placeholders)
+                    if (existingIdx === -1) {
+                        existingIdx = db.entries.findIndex(entry => {
+                            const entryParts = extractRomaneioParts(entry.romaneio);
+                            const romaneioMatch = parts.some(p => entryParts.includes(p));
                             
-                            const t1 = t1Raw.replace(/\D/g, '');
-                            const t2 = t2Raw.replace(/\D/g, '');
+                            if (romaneioMatch) {
+                                const t1Raw = String(entry.ticket || '').trim();
+                                const t2Raw = String(e.ticket || '').trim();
+                                
+                                const t1 = t1Raw.replace(/\D/g, '');
+                                const t2 = t2Raw.replace(/\D/g, '');
+                                
+                                if (!t1 || t1Raw === '---') return true;
+                                if (!t2 || t2Raw === '---') return false;
+                                return t1 === t2;
+                            }
                             
-                            // If existing ticket is a placeholder (---) or empty, we treat it as a match to update it
-                            if (!t1 || t1Raw === '---') return true;
-                            
-                            // If imported ticket is empty/placeholder, we shouldn't overwrite a valid ticket, so treat as new entry?
-                            // No, if imported has no ticket, it's probably bad data, but we follow standard logic.
-                            if (!t2 || t2Raw === '---') return false; // Don't match valid existing ticket with invalid imported ticket
-                            
-                            // If both are valid numbers, they MUST be equal to match
-                            return t1 === t2;
-                        }
-                        
-                        return false;
-                    });
+                            return false;
+                        });
+                    }
 
                     if (existingIdx !== -1) {
                         // An existing entry was found, so we update it
@@ -2926,6 +2928,45 @@
                     if (e.warehouse !== '---' && !db.warehouses.includes(e.warehouse)) db.warehouses.push(e.warehouse);
                     if (e.team !== '---' && !db.teams.includes(e.team)) db.teams.push(e.team);
                 });
+
+                // Deduplicação final por Ticket: consolida possíveis duplicados já existentes
+                (async () => {
+                    const byTicket = new Map();
+                    const unique = [];
+                    const toDelete = [];
+                    
+                    db.entries.forEach(entry => {
+                        const t = String(entry.ticket || '').trim().replace(/\D/g, '');
+                        if (!t) { unique.push(entry); return; }
+                        
+                        if (!byTicket.has(t)) {
+                            byTicket.set(t, entry);
+                            unique.push(entry);
+                        } else {
+                            const kept = byTicket.get(t);
+                            kept.viaBranca = Math.max(kept.viaBranca || 0, entry.viaBranca || 0);
+                            kept.viaAzul = Math.max(kept.viaAzul || 0, entry.viaAzul || 0);
+                            
+                            ['farm','owner','warehouse','variety','team','romaneio'].forEach(f => {
+                                const isKeptPlaceholder = !kept[f] || kept[f] === '---';
+                                if (isKeptPlaceholder && entry[f] && entry[f] !== '---') kept[f] = entry[f];
+                            });
+                            ['bruto','tara','desc','liquido'].forEach(f => {
+                                if ((!kept[f] || kept[f] === 0) && (entry[f] && entry[f] > 0)) kept[f] = entry[f];
+                            });
+                            if (entry.history && (!kept.history || kept.history.length === 0)) kept.history = entry.history;
+                            
+                            if (entry.id !== kept.id) toDelete.push(entry.id);
+                        }
+                    });
+                    
+                    if (toDelete.length > 0) {
+                        db.entries = unique;
+                        for (const id of toDelete) {
+                            if (window.deleteEntryFromFirebase) await window.deleteEntryFromFirebase(id);
+                        }
+                    }
+                })();
 
                 saveToDB();
                 clearImportPreview();
