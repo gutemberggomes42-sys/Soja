@@ -179,21 +179,17 @@
         }
 
         function mergeArrays(local, cloud) {
+            const localMap = new Map();
+            local.forEach(item => localMap.set(String(item.id), item));
+            
             const map = new Map();
-            // Primeiro coloca todos os locais
-            local.forEach(item => map.set(String(item.id), item));
-            // Sobrescreve/Adiciona com os da nuvem (nuvem é a fonte da verdade)
             cloud.forEach(cloudItem => {
-                const localItem = map.get(String(cloudItem.id));
+                const localItem = localMap.get(String(cloudItem.id));
                 
-                // PRESERVAÇÃO DE HISTÓRICO INTELIGENTE:
-                // Se temos um histórico local mais recente ou completo que a nuvem, preservamos o local
-                // Isso evita que o delay da sincronização apague o histórico recém-criado
                 if (localItem && localItem.history && localItem.history.length > 0) {
                     if (!cloudItem.history || cloudItem.history.length < localItem.history.length) {
                         cloudItem.history = localItem.history;
                     } else if (cloudItem.history && cloudItem.history.length > 0) {
-                        // Se ambos têm histórico, pegamos o que tem a data mais recente no topo
                         const localDate = new Date(localItem.history[0].date).getTime();
                         const cloudDate = new Date(cloudItem.history[0].date).getTime();
                         if (localDate > cloudDate) {
@@ -204,6 +200,7 @@
                 
                 map.set(String(cloudItem.id), cloudItem);
             });
+            
             return Array.from(map.values()).sort((a, b) => b.id - a.id);
         }
 
@@ -1824,7 +1821,7 @@
                     if (romGroups.has(p)) {
                         const candidates = romGroups.get(p);
                         
-                        // Verifica cada candidato para ver se é REALMENTE duplicado (Ticket igual ou vazio)
+                        // Verifica cada candidato para ver se é REALMENTE duplicado
                         for (const idx of candidates) {
                             const candidate = uniqueEntries[idx];
                             
@@ -1832,16 +1829,33 @@
                             const t1 = String(entry.ticket || '').replace(/\D/g, '');
                             const t2 = String(candidate.ticket || '').replace(/\D/g, '');
                             
-                            // Se ambos têm tickets válidos e diferentes, NÃO é duplicado (são cargas diferentes do mesmo romaneio)
-                            if (t1 && t2 && t1 !== t2) {
-                                continue; // Próximo candidato
+                            const entryPlaceholder = !entry.farm || entry.farm === '---' || !entry.liquido || entry.liquido === 0;
+                            const candidatePlaceholder = !candidate.farm || candidate.farm === '---' || !candidate.liquido || candidate.liquido === 0;
+                            
+                            if (t1 && t2) {
+                                if (t1 !== t2) continue;
+                                isDuplicate = true;
+                                originalEntryIdx = idx;
+                                break;
                             }
                             
-                            // Se chegou aqui, ou os tickets são iguais, ou um deles é vazio/inválido.
-                            // Consideramos duplicado para mesclar/limpar.
-                            isDuplicate = true;
-                            originalEntryIdx = idx;
-                            break;
+                            if (entryPlaceholder || candidatePlaceholder) {
+                                isDuplicate = true;
+                                originalEntryIdx = idx;
+                                break;
+                            }
+                            
+                            const sameDate = String(entry.date || '') === String(candidate.date || '');
+                            const sameFarm = removeAccents(String(entry.farm || '')).toUpperCase() === removeAccents(String(candidate.farm || '')).toUpperCase();
+                            const sameOwner = removeAccents(String(entry.owner || '')).toUpperCase() === removeAccents(String(candidate.owner || '')).toUpperCase();
+                            const sameWh = removeAccents(String(entry.warehouse || '')).toUpperCase() === removeAccents(String(candidate.warehouse || '')).toUpperCase();
+                            const sameWeight = Math.abs((Number(entry.liquido) || 0) - (Number(candidate.liquido) || 0)) <= 1;
+                            
+                            if (sameDate && sameFarm && sameOwner && sameWh && sameWeight) {
+                                isDuplicate = true;
+                                originalEntryIdx = idx;
+                                break;
+                            }
                         }
                     }
                     if (isDuplicate) break;
