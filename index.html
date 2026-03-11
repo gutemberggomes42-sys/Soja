@@ -126,6 +126,10 @@
                     // Limpeza automática de duplicados residuais (sempre que sincronizar)
                     if (window.currentUserIsAdmin && window.cleanupDuplicates) await window.cleanupDuplicates();
                 }
+            }, (error) => {
+                console.error("Erro ao sincronizar harvest_entries:", error);
+                const statusEl = document.getElementById('sync-status');
+                if (statusEl) statusEl.innerText = 'Erro de Sincronização';
             });
 
             // Sincroniza Áreas de Fazendas
@@ -137,6 +141,10 @@
                         updateLocalAndRender();
                     }
                 }
+            }, (error) => {
+                console.error("Erro ao sincronizar farm_areas:", error);
+                const statusEl = document.getElementById('sync-status');
+                if (statusEl) statusEl.innerText = 'Erro de Sincronização';
             });
 
             // Sincroniza Metas de Depositários
@@ -148,6 +156,10 @@
                         updateLocalAndRender();
                     }
                 }
+            }, (error) => {
+                console.error("Erro ao sincronizar depositary_targets:", error);
+                const statusEl = document.getElementById('sync-status');
+                if (statusEl) statusEl.innerText = 'Erro de Sincronização';
             });
 
             // Sincroniza Conferências Salvas
@@ -159,6 +171,10 @@
                         updateLocalAndRender();
                     }
                 }
+            }, (error) => {
+                console.error("Erro ao sincronizar reconciliations:", error);
+                const statusEl = document.getElementById('sync-status');
+                if (statusEl) statusEl.innerText = 'Erro de Sincronização';
             });
         }
 
@@ -192,6 +208,7 @@
         }
 
         function updateLocalAndRender() {
+            if (window.rebuildDerivedLists) window.rebuildDerivedLists();
             localStorage.setItem('soja_app_single_file_data_v6', JSON.stringify(window.db));
             if (window.renderAll) window.renderAll();
         }
@@ -1743,6 +1760,42 @@
                 .filter(s => s.length > 0);
         };
 
+        window.rebuildDerivedLists = () => {
+            const farms = new Set();
+            const varieties = new Set();
+            const warehouses = new Set();
+            const owners = new Set();
+            const teams = new Set();
+
+            (db.farmAreas || []).forEach(a => {
+                if (a && a.farm && a.farm !== '---') farms.add(String(a.farm).trim());
+                if (a && a.variety && a.variety !== '---') varieties.add(String(a.variety).trim());
+            });
+
+            (db.entries || []).forEach(e => {
+                if (!e) return;
+                if (e.farm && e.farm !== '---') farms.add(String(e.farm).trim());
+                if (e.variety && e.variety !== '---') varieties.add(String(e.variety).trim());
+                if (e.warehouse && e.warehouse !== '---') warehouses.add(String(e.warehouse).trim());
+                if (e.owner && e.owner !== '---') owners.add(String(e.owner).trim());
+                if (e.team && e.team !== '---') teams.add(String(e.team).trim());
+            });
+
+            (db.depositaryTargets || []).forEach(t => {
+                if (!t) return;
+                if (t.owner && t.owner !== '---') owners.add(String(t.owner).trim());
+                if (t.warehouse && t.warehouse !== '---') warehouses.add(String(t.warehouse).trim());
+            });
+
+            const sortPT = (arr) => arr.sort((a, b) => removeAccents(String(a)).toUpperCase().localeCompare(removeAccents(String(b)).toUpperCase()));
+
+            db.farms = sortPT(Array.from(farms));
+            db.varieties = sortPT(Array.from(varieties));
+            db.warehouses = sortPT(Array.from(warehouses));
+            db.owners = sortPT(Array.from(owners));
+            db.teams = sortPT(Array.from(teams));
+        };
+
         async function cleanupDuplicates() {
             if (!db.entries || db.entries.length < 2 || !window.currentUserIsAdmin) return;
             
@@ -1843,6 +1896,7 @@
         }
 
         function saveToDB() { 
+            if (window.rebuildDerivedLists) window.rebuildDerivedLists();
             localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); 
             renderAll(); 
         }
@@ -4346,7 +4400,7 @@
                     <td class="px-6 py-4 font-bold text-slate-400">${a.variety}</td>
                     <td class="px-6 py-4 text-right font-bold text-indigo-600">${a.area.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Há</td>
                     <td class="px-6 py-4 text-right">
-                        <button onclick="if(window.currentUserIsAdmin && confirm('Excluir?')){ db.farmAreas.splice(${idx},1);saveToDB() }" class="text-slate-300 hover:text-red-500 transition-colors admin-only">
+                        <button onclick="if(window.currentUserIsAdmin && confirm('Excluir?')){ db.farmAreas.splice(${idx},1); if(window.saveSettingsToFirebase) window.saveSettingsToFirebase('farmAreas', db.farmAreas); saveToDB() }" class="text-slate-300 hover:text-red-500 transition-colors admin-only">
                             <i data-lucide="trash-2" size="16"></i>
                         </button>
                     </td>
