@@ -3887,26 +3887,29 @@
                     removeAccents(e.team).toUpperCase().includes(romFilter) ||
                     removeAccents(e.warehouse || '').toUpperCase().includes(romFilter);
                 
+                const vB = (e.viaBranca === false || e.viaBranca === undefined || e.viaBranca === null) ? 0 : Number(e.viaBranca);
+                const vA = (e.viaAzul === false || e.viaAzul === undefined || e.viaAzul === null) ? 0 : Number(e.viaAzul);
+
                 let matchesStatus = true;
                 if (statusFilter === 'pending') {
-                    matchesStatus = (e.viaBranca === 0 || e.viaAzul === 0);
+                    matchesStatus = (vB === 0 || vA === 0);
                 } else if (statusFilter === 'cambui') {
-                    matchesStatus = (e.viaBranca === 1 && e.viaAzul === 1);
+                    matchesStatus = (vB === 1 && vA === 1);
                 } else if (statusFilter === 'complete') {
-                    matchesStatus = (e.viaBranca === 5 && e.viaAzul === 5);
+                    matchesStatus = (vB === 5 && vA === 5);
                 }
 
                 let matchesLocation = true;
                 if (locationFilter === 'cambui') {
-                    matchesLocation = (e.viaBranca === 1 && e.viaAzul === 1);
+                    matchesLocation = (vB === 1 && vA === 1);
                 } else if (locationFilter === 'floresta') {
-                    matchesLocation = (e.viaBranca === 2 || e.viaAzul === 2);
+                    matchesLocation = (vB === 2 || vA === 2);
                 } else if (locationFilter === 'panorama') {
-                    matchesLocation = (e.viaBranca === 3 || e.viaAzul === 3);
+                    matchesLocation = (vB === 3 || vA === 3);
                 } else if (locationFilter === 'vale') {
-                    matchesLocation = (e.viaBranca === 4 || e.viaAzul === 4);
+                    matchesLocation = (vB === 4 || vA === 4);
                 } else if (locationFilter === 'controladoria') {
-                    matchesLocation = (e.viaBranca === 5 || e.viaAzul === 5);
+                    matchesLocation = (vB === 5 || vA === 5);
                 }
 
                 return matchesSearch && matchesStatus && matchesLocation;
@@ -3993,20 +3996,47 @@
             `;
             document.getElementById('romaneios-print-summary').innerHTML = printSummary;
 
-            // Convert to array and sort by date of newest entry in group
-            const sortedGroups = Object.values(groupedEntries).sort((groupA, groupB) => {
-                const dateA = Math.max(...groupA.map(e => new Date(e.date).getTime()));
-                const dateB = Math.max(...groupB.map(e => new Date(e.date).getTime()));
-                return dateB - dateA;
+            const getV = (val) => (val === false || val === undefined || val === null) ? 0 : Number(val);
+            const getGroupRank = (group) => {
+                const isComplete = group.every(e => getV(e.viaBranca) === 5 && getV(e.viaAzul) === 5);
+                if (isComplete) return 2;
+                const isPending = group.some(e => getV(e.viaBranca) === 0 || getV(e.viaAzul) === 0);
+                if (isPending) return 0;
+                return 1;
+            };
+
+            const groupsMeta = Object.values(groupedEntries).map(group => {
+                const maxDate = Math.max(...group.map(e => new Date(e.date).getTime()));
+                return { group, rank: getGroupRank(group), maxDate };
+            }).sort((a, b) => {
+                if (a.rank !== b.rank) return a.rank - b.rank;
+                return b.maxDate - a.maxDate;
             });
 
-            body.innerHTML = sortedGroups.map(group => {
+            const pendingGroups = groupsMeta.filter(g => g.rank === 0).map(g => g.group);
+            const inFlowGroups = groupsMeta.filter(g => g.rank === 1).map(g => g.group);
+            const completeGroups = groupsMeta.filter(g => g.rank === 2).map(g => g.group);
+
+            const renderSectionHeader = (label, cls) => `
+                <tr>
+                    <td colspan="5" class="px-6 py-3 ${cls} text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+                        ${label}
+                    </td>
+                </tr>
+            `;
+
+            const renderGroupRow = (group) => {
                 // Main entry is the first one, but we use it for shared fields
                 const mainEntry = group[0];
                 const isMulti = group.length > 1;
                 
                 // Calculate aggregated status for the group (if all complete, group is complete)
-                const isComplete = group.every(e => e.viaBranca === 5 && e.viaAzul === 5);
+                const isComplete = group.every(e => getV(e.viaBranca) === 5 && getV(e.viaAzul) === 5);
+                const isPending = !isComplete && group.some(e => getV(e.viaBranca) === 0 || getV(e.viaAzul) === 0);
+                const statusText = isComplete ? 'Todos Concluídos' : (isPending ? 'Pendente' : 'Em Fluxo');
+                const statusClass = isComplete ? 'bg-green-600 text-white' : (isPending ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-500');
+                const groupViaBranca = Math.max(...group.map(e => getV(e.viaBranca)));
+                const groupViaAzul = Math.max(...group.map(e => getV(e.viaAzul)));
                 
                 // Helper to render buttons for a specific entry (or disabled/summary for group)
                 const getViaButton = (type, value, id, isGroup = false) => {
@@ -4095,10 +4125,10 @@
                             <!-- Buttons (Hidden if Multi-ticket, handled by group) -->
                             ${!isMulti ? `
                             <div class="col-span-2">
-                                ${getViaButton('viaBranca', e.viaBranca || 0, e.id)}
+                                ${getViaButton('viaBranca', getV(e.viaBranca), e.id)}
                             </div>
                             <div class="col-span-2">
-                                ${getViaButton('viaAzul', e.viaAzul || 0, e.id)}
+                                ${getViaButton('viaAzul', getV(e.viaAzul), e.id)}
                             </div>
                             ` : `
                             <div class="col-span-4 flex items-center justify-center">
@@ -4131,17 +4161,17 @@
                                     <!-- Group Controls (Only for multi-ticket) -->
                                     <div class="flex items-center gap-4 flex-1 justify-center">
                                         <div class="w-48">
-                                            ${getViaButton('viaBranca', mainEntry.viaBranca || 0, extractRomaneioParts(mainEntry.romaneio)[0] || mainEntry.romaneio, true)}
+                                            ${getViaButton('viaBranca', groupViaBranca, extractRomaneioParts(mainEntry.romaneio)[0] || mainEntry.romaneio, true)}
                                         </div>
                                         <div class="w-48">
-                                            ${getViaButton('viaAzul', mainEntry.viaAzul || 0, extractRomaneioParts(mainEntry.romaneio)[0] || mainEntry.romaneio, true)}
+                                            ${getViaButton('viaAzul', groupViaAzul, extractRomaneioParts(mainEntry.romaneio)[0] || mainEntry.romaneio, true)}
                                         </div>
                                     </div>
                                     ` : '<div class="flex-1"></div>'}
                                     
                                     <div class="flex items-center gap-3 justify-end w-1/4">
-                                        <span class="inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${isComplete ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'}">
-                                            ${isComplete ? 'Todos Concluídos' : 'Em Fluxo'}
+                                        <span class="inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${statusClass}">
+                                            ${statusText}
                                         </span>
                                     </div>
                                 </div>
@@ -4154,7 +4184,19 @@
                         </td>
                     </tr>
                 `;
-            }).join('') || '<tr><td colspan="5" class="py-12 text-center text-slate-300">Nenhum romaneio encontrado</td></tr>';
+            };
+
+            let html = '';
+            if (pendingGroups.length) html += renderSectionHeader('Pendentes (Vias com status 0)', 'text-red-600 bg-red-50/40');
+            html += pendingGroups.map(renderGroupRow).join('');
+
+            if (inFlowGroups.length) html += renderSectionHeader('Em Fluxo (Usinas / Armazéns)', 'text-slate-500 bg-slate-50/60');
+            html += inFlowGroups.map(renderGroupRow).join('');
+
+            if (completeGroups.length) html += renderSectionHeader('Concluídos (Tudo na Controladoria)', 'text-green-700 bg-green-50/40');
+            html += completeGroups.map(renderGroupRow).join('');
+
+            body.innerHTML = html || '<tr><td colspan="5" class="py-12 text-center text-slate-300">Nenhum romaneio encontrado</td></tr>';
             
             lucide.createIcons();
         }
