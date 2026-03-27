@@ -4169,7 +4169,13 @@
                                     </div>
                                     ` : '<div class="flex-1"></div>'}
                                     
-                                    <div class="flex items-center gap-3 justify-end w-1/4">
+                                    <div class="flex items-center gap-2 justify-end w-1/4">
+                                        ${window.currentUserIsAdmin ? `
+                                        <button onclick="setGroupControladoria('${extractRomaneioParts(mainEntry.romaneio)[0] || mainEntry.romaneio}')" class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm">
+                                            <i data-lucide="shield-check" size="12"></i>
+                                            CONTROLADORIA 2 VIAS
+                                        </button>
+                                        ` : ''}
                                         <span class="inline-flex items-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${statusClass}">
                                             ${statusText}
                                         </span>
@@ -4221,6 +4227,39 @@
                 entry[type] = nextStatus;
                 if (window.saveEntryToFirebase) window.saveEntryToFirebase(entry);
             });
+
+            saveToDB();
+        }
+
+        window.setGroupControladoria = async function(romaneioKey) {
+            if (!window.currentUserIsAdmin) return alert('Acesso negado.');
+            if (!confirm('Marcar VIA BRANCA e VIA AZUL como CONTROLADORIA para este romaneio?')) return;
+
+            const groupEntries = db.entries.filter(e => {
+                const keys = extractRomaneioParts(e.romaneio);
+                return keys.includes(String(romaneioKey)) || e.romaneio === romaneioKey;
+            });
+            if (groupEntries.length === 0) return;
+
+            for (const entry of groupEntries) {
+                const oldB = (entry.viaBranca === false || entry.viaBranca === undefined || entry.viaBranca === null) ? 0 : Number(entry.viaBranca);
+                const oldA = (entry.viaAzul === false || entry.viaAzul === undefined || entry.viaAzul === null) ? 0 : Number(entry.viaAzul);
+                if (oldB === 5 && oldA === 5) continue;
+
+                entry.viaBranca = 5;
+                entry.viaAzul = 5;
+
+                const changes = [];
+                if (oldB !== 5) changes.push({ field: 'viaBranca', old: oldB, new: 5 });
+                if (oldA !== 5) changes.push({ field: 'viaAzul', old: oldA, new: 5 });
+                if (changes.length > 0) {
+                    if (!entry.history) entry.history = [];
+                    entry.history.unshift({ date: new Date().toISOString(), changes });
+                    if (entry.history.length > 5) entry.history = entry.history.slice(0, 5);
+                }
+
+                if (window.saveEntryToFirebase) await window.saveEntryToFirebase(entry);
+            }
 
             saveToDB();
         }
