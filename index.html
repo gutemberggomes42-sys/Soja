@@ -211,11 +211,20 @@
         }
 
         // Funções globais de salvamento otimizadas
+        window.__lastFirebasePermissionAlertAt = window.__lastFirebasePermissionAlertAt || 0;
+        window.__showFirebasePermissionAlert = (message) => {
+            const now = Date.now();
+            if (now - window.__lastFirebasePermissionAlertAt < 8000) return;
+            window.__lastFirebasePermissionAlertAt = now;
+            alert(message);
+        };
+
         window.saveEntryToFirebase = async (entry) => {
             if (!auth.currentUser) {
                 console.warn("Save attempted without authentication");
-                return;
+                return false;
             }
+            if (!window.currentUserIsAdmin) return false;
             try {
                 const statusEl = document.getElementById('sync-status');
                 if (statusEl) statusEl.innerText = 'Sincronizando...';
@@ -223,15 +232,23 @@
                 await setDoc(doc(firestore, "harvest_entries", String(entry.id)), entry);
                 if (statusEl) statusEl.innerText = 'Sincronizado';
                 console.log(`Firebase Entry Saved: ${entry.id}`);
+                return true;
             } catch (e) {
                 console.error("Erro Firebase Entry:", e);
-                alert("Erro ao sincronizar carga no banco (Nuvem): " + e.message);
+                const code = String(e?.code || '');
+                if (code === 'permission-denied' || String(e?.message || '').toLowerCase().includes('insufficient')) {
+                    window.__showFirebasePermissionAlert("Sem permissão para salvar na nuvem. Faça login com o admin (gutemberggg10@gmail.com) ou ajuste as regras do Firebase.");
+                } else {
+                    window.__showFirebasePermissionAlert("Erro ao sincronizar carga no banco (Nuvem): " + e.message);
+                }
                 if (statusEl) statusEl.innerText = 'Erro na Nuvem';
+                return false;
             }
         };
 
         window.deleteEntryFromFirebase = async (id) => {
             if (!auth.currentUser) return;
+            if (!window.currentUserIsAdmin) return;
             try {
                 await deleteDoc(doc(firestore, "harvest_entries", String(id)));
             } catch (e) {
@@ -241,6 +258,7 @@
 
         window.saveSettingsToFirebase = async (type, data) => {
             if (!auth.currentUser) return;
+            if (!window.currentUserIsAdmin) return;
             try {
                 let docName, fieldName;
                 if (type === 'farmAreas') {
@@ -260,7 +278,12 @@
                 }
             } catch (e) {
                 console.error("Erro Firebase Settings:", e);
-                alert("Erro ao salvar no banco de dados (Nuvem): " + e.message);
+                const code = String(e?.code || '');
+                if (code === 'permission-denied' || String(e?.message || '').toLowerCase().includes('insufficient')) {
+                    window.__showFirebasePermissionAlert("Sem permissão para salvar na nuvem. Faça login com o admin (gutemberggg10@gmail.com) ou ajuste as regras do Firebase.");
+                } else {
+                    window.__showFirebasePermissionAlert("Erro ao salvar no banco de dados (Nuvem): " + e.message);
+                }
             }
         };
 
