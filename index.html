@@ -4863,18 +4863,22 @@
                 const diffS = depS - d.targetSacks;
                 totalDepKg += d.depositedKg;
                 totalDepSacks += depS;
+                const ownerDisplay = d.owner === 'NÃO DEFINIDO' ? '<span class="text-red-600 italic font-black">SEM DEPOSITÁRIO</span>' : d.owner;
+                const warehouseDisplay = d.warehouse === 'NÃO DEFINIDO' ? '<span class="text-red-600 italic font-bold">SEM ARMAZÉM</span>' : d.warehouse;
+                const ownerArg = JSON.stringify(d.owner);
+                const warehouseArg = JSON.stringify(d.warehouse);
                 html += `
-                    <tr class="hover:bg-slate-50">
-                        <td class="border border-slate-200 px-4 py-4 text-left font-black uppercase">${d.owner === 'NÃO DEFINIDO' ? '' : d.owner}</td>
+                    <tr class="hover:bg-slate-50 cursor-pointer" onclick="showDepositaryDetails(${ownerArg}, ${warehouseArg})">
+                        <td class="border border-slate-200 px-4 py-4 text-left font-black uppercase">${ownerDisplay}</td>
                         <td class="border border-slate-200 px-4 py-4">${d.targetSacks > 0 ? d.targetSacks.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '-'}</td>
                         <td class="border border-slate-200 px-4 py-4">${targetT > 0 ? targetT.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '-'}</td>
-                        <td class="border border-slate-200 px-4 py-4 text-slate-500 font-bold">${d.warehouse === 'NÃO DEFINIDO' ? '' : d.warehouse}</td>
+                        <td class="border border-slate-200 px-4 py-4 text-slate-500 font-bold">${warehouseDisplay}</td>
                         <td class="border border-slate-200 px-4 py-4 font-black">${depT.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                         <td class="border border-slate-200 px-4 py-4 font-black">${depS.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
                         <td class="border border-slate-200 px-4 py-4 ${diffT < 0 ? 'text-red-600' : 'text-green-600'}">${diffT.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                         <td class="border border-slate-200 px-4 py-4 ${diffS < 0 ? 'text-red-600' : 'text-green-600'}">${diffS.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
                         <td class="border border-slate-200 px-2 py-2 print:hidden">
-                            <button onclick="if(window.currentUserIsAdmin && confirm('Excluir meta?')){ db.depositaryTargets=db.depositaryTargets.filter(t=>!(t.owner==='${d.owner}' && t.warehouse==='${d.warehouse}')); if(window.saveSettingsToFirebase) window.saveSettingsToFirebase('depositaryTargets', db.depositaryTargets); saveToDB() }" class="text-slate-300 hover:text-red-500 transition-colors admin-only">
+                            <button onclick="event.stopPropagation(); if(window.currentUserIsAdmin && confirm('Excluir meta?')){ db.depositaryTargets=db.depositaryTargets.filter(t=>!(t.owner==='${d.owner}' && t.warehouse==='${d.warehouse}')); if(window.saveSettingsToFirebase) window.saveSettingsToFirebase('depositaryTargets', db.depositaryTargets); saveToDB() }" class="text-slate-300 hover:text-red-500 transition-colors admin-only">
                                 <i data-lucide="trash-2" size="14"></i>
                             </button>
                         </td>
@@ -4885,6 +4889,83 @@
             document.getElementById('total-dep-t').innerText = (totalDepKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
             document.getElementById('total-dep-s').innerText = totalDepSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
             lucide.createIcons();
+        }
+
+        window.showDepositaryDetails = function(owner, warehouse) {
+            const isThirdPartyStorage = (entry) => removeAccents(String(entry.operation || entry.obs || '')).toUpperCase().includes('ARMAZENAMENTO DE TERCEIROS');
+            const ownerKey = owner === 'NÃO DEFINIDO' ? '---' : owner;
+            const warehouseKey = warehouse === 'NÃO DEFINIDO' ? '---' : warehouse;
+
+            const items = db.entries
+                .filter(e => e.farm !== '---' && e.farm && !isThirdPartyStorage(e))
+                .filter(e => {
+                    const eOwner = e.owner && e.owner !== '---' ? e.owner : '---';
+                    const eWh = e.warehouse && e.warehouse !== '---' ? e.warehouse : '---';
+                    return eOwner === ownerKey && eWh === warehouseKey;
+                })
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            const titleOwner = owner === 'NÃO DEFINIDO' ? 'SEM DEPOSITÁRIO' : owner;
+            const titleWh = warehouse === 'NÃO DEFINIDO' ? 'SEM ARMAZÉM' : warehouse;
+
+            const overlayId = 'depositary-details-modal';
+            const existing = document.getElementById(overlayId);
+            if (existing) existing.remove();
+
+            const totalKg = items.reduce((acc, e) => acc + (Number(e.liquido) || 0), 0);
+
+            const rows = items.map(e => {
+                const adminActions = window.currentUserIsAdmin ? `
+                    <button onclick="openEditModal(${e.id})" class="px-2 py-1 rounded-lg bg-amber-100 text-amber-800 text-[10px] font-black uppercase">Editar</button>
+                ` : '';
+                return `
+                    <tr class="hover:bg-slate-50">
+                        <td class="border border-slate-200 px-3 py-2 font-mono text-[10px] text-slate-600">${e.ticket || '---'}</td>
+                        <td class="border border-slate-200 px-3 py-2 font-mono text-[10px] text-slate-600">${e.romaneio || '---'}</td>
+                        <td class="border border-slate-200 px-3 py-2 text-[10px] text-slate-500 font-bold">${e.date ? new Date(e.date).toLocaleDateString('pt-BR') : '---'}</td>
+                        <td class="border border-slate-200 px-3 py-2 text-[10px] font-black uppercase text-slate-700">${e.farm || '---'}</td>
+                        <td class="border border-slate-200 px-3 py-2 text-right text-[10px] font-black text-slate-700">${(Number(e.liquido) || 0).toLocaleString('pt-BR')} kg</td>
+                        <td class="border border-slate-200 px-3 py-2 text-right">${adminActions}</td>
+                    </tr>
+                `;
+            }).join('') || `
+                <tr><td colspan="6" class="border border-slate-200 px-3 py-10 text-center text-slate-400">Nenhuma carga encontrada para este grupo</td></tr>
+            `;
+
+            const html = document.createElement('div');
+            html.id = overlayId;
+            html.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 p-4';
+            html.innerHTML = `
+                <div class="w-full max-w-5xl bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-black uppercase text-slate-800">${titleOwner}</div>
+                            <div class="text-[10px] font-bold text-slate-500 uppercase">${titleWh}</div>
+                            <div class="text-[10px] font-bold text-slate-400 mt-1">Total: ${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T • ${(totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} sacos</div>
+                        </div>
+                        <button onclick="document.getElementById('${overlayId}').remove()" class="px-3 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase">Fechar</button>
+                    </div>
+                    <div class="p-6">
+                        <div class="overflow-auto max-h-[70vh]">
+                            <table class="w-full border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50">
+                                        <th class="border border-slate-200 px-3 py-2 text-left text-[9px] font-black uppercase text-slate-500">Ticket</th>
+                                        <th class="border border-slate-200 px-3 py-2 text-left text-[9px] font-black uppercase text-slate-500">Romaneio</th>
+                                        <th class="border border-slate-200 px-3 py-2 text-left text-[9px] font-black uppercase text-slate-500">Data</th>
+                                        <th class="border border-slate-200 px-3 py-2 text-left text-[9px] font-black uppercase text-slate-500">Fazenda</th>
+                                        <th class="border border-slate-200 px-3 py-2 text-right text-[9px] font-black uppercase text-slate-500">Peso Líq</th>
+                                        <th class="border border-slate-200 px-3 py-2 text-right text-[9px] font-black uppercase text-slate-500">Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${rows}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(html);
         }
 
         // INIT
