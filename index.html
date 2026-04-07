@@ -130,6 +130,10 @@
                 console.error("Erro ao sincronizar harvest_entries:", error);
                 const statusEl = document.getElementById('sync-status');
                 if (statusEl) statusEl.innerText = 'Erro de Sincronização';
+                const code = String(error?.code || '');
+                if (code === 'permission-denied' && window.__showFirebasePermissionAlert) {
+                    window.__showFirebasePermissionAlert("Sem permissão para LER dados da nuvem (harvest_entries). Verifique as regras do Firebase para permitir leitura.");
+                }
             });
 
             // Sincroniza Áreas de Fazendas
@@ -145,6 +149,10 @@
                 console.error("Erro ao sincronizar farm_areas:", error);
                 const statusEl = document.getElementById('sync-status');
                 if (statusEl) statusEl.innerText = 'Erro de Sincronização';
+                const code = String(error?.code || '');
+                if (code === 'permission-denied' && window.__showFirebasePermissionAlert) {
+                    window.__showFirebasePermissionAlert("Sem permissão para LER dados da nuvem (farm_areas). Verifique as regras do Firebase para permitir leitura.");
+                }
             });
 
             // Sincroniza Metas de Depositários
@@ -160,6 +168,10 @@
                 console.error("Erro ao sincronizar depositary_targets:", error);
                 const statusEl = document.getElementById('sync-status');
                 if (statusEl) statusEl.innerText = 'Erro de Sincronização';
+                const code = String(error?.code || '');
+                if (code === 'permission-denied' && window.__showFirebasePermissionAlert) {
+                    window.__showFirebasePermissionAlert("Sem permissão para LER dados da nuvem (depositary_targets). Verifique as regras do Firebase para permitir leitura.");
+                }
             });
 
             // Sincroniza Conferências Salvas
@@ -175,6 +187,10 @@
                 console.error("Erro ao sincronizar reconciliations:", error);
                 const statusEl = document.getElementById('sync-status');
                 if (statusEl) statusEl.innerText = 'Erro de Sincronização';
+                const code = String(error?.code || '');
+                if (code === 'permission-denied' && window.__showFirebasePermissionAlert) {
+                    window.__showFirebasePermissionAlert("Sem permissão para LER dados da nuvem (reconciliations). Verifique as regras do Firebase para permitir leitura.");
+                }
             });
         }
 
@@ -225,8 +241,8 @@
                 return false;
             }
             if (!window.currentUserIsAdmin) return false;
+            const statusEl = document.getElementById('sync-status');
             try {
-                const statusEl = document.getElementById('sync-status');
                 if (statusEl) statusEl.innerText = 'Sincronizando...';
                 // Salva documento individual usando ID como nome
                 await setDoc(doc(firestore, "harvest_entries", String(entry.id)), entry);
@@ -2695,13 +2711,14 @@
                     id: Date.now() + Math.random(),
                     date: parseExcelDate(findCol(['Data/Hora 1', 'DATA', 'DATA HORA'])) || new Date().toISOString().split('T')[0],
                     farm: findCol(['Fazenda', 'FAZENDA', 'PROPRIEDADE']) || '---',
-                    warehouse: findCol(['Local Destino', 'LOCAL DESTINO', 'ARMAZÉM', 'DESTINO']) || '---',
-                    owner: findCol(['Depositário', 'DEPOSITARIO', 'PROPRIETÁRIO']) || '---',
+                    warehouse: findCol(['Local Destino', 'LOCAL DESTINO', 'ARMAZÉM', 'ARMAZEM', 'DESTINO', 'DEPÓSITO', 'DEPOSITO', 'UNIDADE', 'UNID.']) || '---',
+                    owner: findCol(['Depositário', 'DEPOSITARIO', 'PROPRIETÁRIO', 'PROPRIETARIO', 'TRANSACIONADOR']) || '---',
                     ticket: String(findCol(['Ticket', 'TICKET', 'Nº TICKET']) || '---'),
                     romaneio: String(findCol(['Nr. Controle Produção', 'ROMANEIO', 'CONTROLE', 'Nº CONTROLE']) || '---'),
                     variety: findCol(['Variedade', 'VARIEDADE', 'CULTIVAR']) || '---',
                     team: findCol(['Equipe', 'EQUIPE', 'COLHEITA']) || '---',
                     obs: findCol(['Observação', 'OBSERVAÇÃO', 'OBS']) || 'Importado via Excel',
+                    operation: findCol(['Tipo de Operação', 'TIPO DE OPERACAO', 'Tipo de Pesagem', 'TIPO DE PESAGEM', 'Operação', 'OPERACAO']) || '---',
                     bruto, tara, desc, liquido,
                     viaBranca: false,
                     viaAzul: false
@@ -2752,6 +2769,7 @@
                         team: detect(line, ['FERREIRA', 'ANTONIO AIRES', 'EQUIPE', 'COLHEITA', '0164-C']),
                         ticket: ticket,
                         obs: detectedObs,
+                        operation: detect(line, ['ARMAZENAMENTO DE TERCEIROS', 'DESCARGA', 'CARREGAMENTO', 'DEPOSITO']),
                         bruto: 0, tara: 0, desc: 0, liquido: 0,
                         viaBranca: false,
                         viaAzul: false
@@ -2954,7 +2972,7 @@
                         
                         // Check for changes
                         const changes = [];
-                        const fieldsToCheck = ['farm', 'warehouse', 'owner', 'ticket', 'variety', 'team', 'obs', 'bruto', 'tara', 'desc', 'liquido', 'date', 'romaneio', 'viaBranca', 'viaAzul'];
+                        const fieldsToCheck = ['farm', 'warehouse', 'owner', 'ticket', 'variety', 'team', 'obs', 'operation', 'bruto', 'tara', 'desc', 'liquido', 'date', 'romaneio', 'viaBranca', 'viaAzul'];
                         
                         fieldsToCheck.forEach(field => {
                             // Normalização rigorosa para comparação: remove espaços e trata nulos como string vazia
@@ -4476,7 +4494,8 @@
         }
 
         function renderDeposits() {
-            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+            const isThirdPartyStorage = (entry) => removeAccents(String(entry.operation || entry.obs || '')).toUpperCase().includes('ARMAZENAMENTO DE TERCEIROS');
+            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm && !isThirdPartyStorage(e));
             const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
             
             console.log("Deposits Totals - Total Kg:", totalKg, "Total Sacos:", totalKg / 60);
@@ -4489,11 +4508,11 @@
             realEntries.forEach(e => { 
                 const ownerName = e.owner && e.owner !== '---' ? e.owner : 'NÃO DEFINIDO';
                 const warehouseName = e.warehouse && e.warehouse !== '---' ? e.warehouse : 'NÃO DEFINIDO';
-                const k = `${ownerName}-${warehouseName}`; 
+                const k = JSON.stringify([ownerName, warehouseName]); 
                 groups[k] = (groups[k] || 0) + e.liquido; 
             });
             document.getElementById('deposits-table-body').innerHTML = Object.entries(groups).map(([k, v]) => {
-                const [owner, warehouse] = k.split('-');
+                const [owner, warehouse] = JSON.parse(k);
                 const displayOwner = owner === 'NÃO DEFINIDO' ? '' : owner;
                 const displayWarehouse = warehouse === 'NÃO DEFINIDO' ? '' : warehouse;
                 return `
@@ -4812,17 +4831,22 @@
             const dataMap = {};
             
             // Filtra apenas entradas REAIS
-            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+            const isThirdPartyStorage = (entry) => removeAccents(String(entry.operation || entry.obs || '')).toUpperCase().includes('ARMAZENAMENTO DE TERCEIROS');
+            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm && !isThirdPartyStorage(e));
 
             realEntries.forEach(e => {
-                const k = `${e.owner}-${e.warehouse}`;
-                if (!dataMap[k]) dataMap[k] = { owner: e.owner, warehouse: e.warehouse, targetSacks: 0, depositedKg: 0 };
+                const ownerName = e.owner && e.owner !== '---' ? e.owner : 'NÃO DEFINIDO';
+                const warehouseName = e.warehouse && e.warehouse !== '---' ? e.warehouse : 'NÃO DEFINIDO';
+                const k = JSON.stringify([ownerName, warehouseName]);
+                if (!dataMap[k]) dataMap[k] = { owner: ownerName, warehouse: warehouseName, targetSacks: 0, depositedKg: 0 };
                 dataMap[k].depositedKg += e.liquido;
             });
             db.depositaryTargets.forEach(t => {
-                const k = `${t.owner}-${t.warehouse}`;
-                if (!dataMap[k]) dataMap[k] = { owner: t.owner, warehouse: t.warehouse, targetSacks: 0, depositedKg: 0 };
-                dataMap[k].targetSacks = t.sacks;
+                const ownerName = t.owner && t.owner !== '---' ? t.owner : 'NÃO DEFINIDO';
+                const warehouseName = t.warehouse && t.warehouse !== '---' ? t.warehouse : 'NÃO DEFINIDO';
+                const k = JSON.stringify([ownerName, warehouseName]);
+                if (!dataMap[k]) dataMap[k] = { owner: ownerName, warehouse: warehouseName, targetSacks: 0, depositedKg: 0 };
+                dataMap[k].targetSacks = t.sacks || 0;
             });
             let totalDepKg = 0;
             let totalDepSacks = 0;
@@ -4841,10 +4865,10 @@
                 totalDepSacks += depS;
                 html += `
                     <tr class="hover:bg-slate-50">
-                        <td class="border border-slate-200 px-4 py-4 text-left font-black uppercase">${d.owner}</td>
+                        <td class="border border-slate-200 px-4 py-4 text-left font-black uppercase">${d.owner === 'NÃO DEFINIDO' ? '' : d.owner}</td>
                         <td class="border border-slate-200 px-4 py-4">${d.targetSacks > 0 ? d.targetSacks.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '-'}</td>
                         <td class="border border-slate-200 px-4 py-4">${targetT > 0 ? targetT.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '-'}</td>
-                        <td class="border border-slate-200 px-4 py-4 text-slate-500 font-bold">${d.warehouse}</td>
+                        <td class="border border-slate-200 px-4 py-4 text-slate-500 font-bold">${d.warehouse === 'NÃO DEFINIDO' ? '' : d.warehouse}</td>
                         <td class="border border-slate-200 px-4 py-4 font-black">${depT.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                         <td class="border border-slate-200 px-4 py-4 font-black">${depS.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
                         <td class="border border-slate-200 px-4 py-4 ${diffT < 0 ? 'text-red-600' : 'text-green-600'}">${diffT.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
