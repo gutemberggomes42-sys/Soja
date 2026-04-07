@@ -4865,8 +4865,8 @@
                 totalDepSacks += depS;
                 const ownerDisplay = d.owner === 'NÃO DEFINIDO' ? '<span class="text-red-600 italic font-black">SEM DEPOSITÁRIO</span>' : d.owner;
                 const warehouseDisplay = d.warehouse === 'NÃO DEFINIDO' ? '<span class="text-red-600 italic font-bold">SEM ARMAZÉM</span>' : d.warehouse;
-                const ownerArg = JSON.stringify(d.owner);
-                const warehouseArg = JSON.stringify(d.warehouse);
+                const ownerArg = `'${String(d.owner).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+                const warehouseArg = `'${String(d.warehouse).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
                 html += `
                     <tr class="hover:bg-slate-50 cursor-pointer" onclick="showDepositaryDetails(${ownerArg}, ${warehouseArg})">
                         <td class="border border-slate-200 px-4 py-4 text-left font-black uppercase">${ownerDisplay}</td>
