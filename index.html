@@ -4972,7 +4972,10 @@
                             <div class="text-[10px] font-bold text-slate-500 uppercase">${titleWh}</div>
                             <div class="text-[10px] font-bold text-slate-400 mt-1">Total: ${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T • ${(totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} sacos</div>
                         </div>
-                        <button onclick="document.getElementById('${overlayId}').remove()" class="px-3 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase">Fechar</button>
+                        <div class="flex items-center gap-2">
+                            <button onclick="printDepositaryDetails(${ownerArg}, ${warehouseArg})" class="px-3 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase hover:bg-blue-700">Imprimir</button>
+                            <button onclick="document.getElementById('${overlayId}').remove()" class="px-3 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase">Fechar</button>
+                        </div>
                     </div>
                     <div class="p-6">
                         <div class="overflow-auto max-h-[70vh]">
@@ -5004,6 +5007,64 @@
             db.entries = db.entries.filter(x => x.id !== id);
             saveToDB();
             window.showDepositaryDetails(owner, warehouse);
+        }
+
+        window.printDepositaryDetails = function(owner, warehouse) {
+            const isThirdPartyStorage = (entry) => removeAccents(String(entry.operation || entry.obs || '')).toUpperCase().includes('ARMAZENAMENTO DE TERCEIROS');
+            const ownerKey = owner === 'NÃO DEFINIDO' ? '---' : owner;
+            const warehouseKey = warehouse === 'NÃO DEFINIDO' ? '---' : warehouse;
+            const items = db.entries
+                .filter(e => e.farm !== '---' && e.farm && !isThirdPartyStorage(e))
+                .filter(e => {
+                    const eOwner = e.owner && e.owner !== '---' ? e.owner : '---';
+                    const eWh = e.warehouse && e.warehouse !== '---' ? e.warehouse : '---';
+                    return eOwner === ownerKey && eWh === warehouseKey;
+                })
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            const titleOwner = owner === 'NÃO DEFINIDO' ? 'SEM DEPOSITÁRIO' : owner;
+            const titleWh = warehouse === 'NÃO DEFINIDO' ? 'SEM ARMAZÉM' : warehouse;
+            const totalKg = items.reduce((acc, e) => acc + (Number(e.liquido) || 0), 0);
+            const rows = items.map(e => `
+                <tr>
+                    <td style="padding:6px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;">${e.ticket || '---'}</td>
+                    <td style="padding:6px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;">${e.romaneio || '---'}</td>
+                    <td style="padding:6px;border:1px solid #e5e7eb;font-size:11px;">${e.date ? new Date(e.date).toLocaleDateString('pt-BR') : '---'}</td>
+                    <td style="padding:6px;border:1px solid #e5e7eb;font-size:11px;text-transform:uppercase;">${e.farm || '---'}</td>
+                    <td style="padding:6px;border:1px solid #e5e7eb;text-align:right;font-size:11px;">${(Number(e.liquido)||0).toLocaleString('pt-BR')} kg</td>
+                </tr>
+            `).join('') || `<tr><td colspan="5" style="padding:20px;border:1px solid #e5e7eb;text-align:center;color:#94a3b8;">Sem cargas</td></tr>`;
+            const win = window.open('', '_blank');
+            const html = `
+                <html>
+                <head>
+                    <title>Relatório – ${titleOwner} / ${titleWh}</title>
+                    <meta charset="utf-8" />
+                </head>
+                <body style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial;">
+                    <div style="margin:24px;">
+                        <h2 style="margin:0 0 4px 0;">${titleOwner}</h2>
+                        <div style="color:#64748b;font-size:12px;margin-bottom:12px;text-transform:uppercase;">${titleWh}</div>
+                        <div style="color:#64748b;font-size:12px;margin-bottom:16px;">Total: ${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T • ${(totalKg/60).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} sacos</div>
+                        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                            <thead>
+                                <tr style="background:#f8fafc;">
+                                    <th style="padding:6px;border:1px solid #e5e7eb;text-align:left;">Ticket</th>
+                                    <th style="padding:6px;border:1px solid #e5e7eb;text-align:left;">Romaneio</th>
+                                    <th style="padding:6px;border:1px solid #e5e7eb;text-align:left;">Data</th>
+                                    <th style="padding:6px;border:1px solid #e5e7eb;text-align:left;">Fazenda</th>
+                                    <th style="padding:6px;border:1px solid #e5e7eb;text-align:right;">Peso Líq</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                    <script>window.onload = () => window.print();<\/script>
+                </body>
+                </html>
+            `;
+            win.document.open();
+            win.document.write(html);
+            win.document.close();
         }
 
         // INIT
