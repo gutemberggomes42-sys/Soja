@@ -4878,9 +4878,14 @@
                         <td class="border border-slate-200 px-4 py-4 ${diffT < 0 ? 'text-red-600' : 'text-green-600'}">${diffT.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                         <td class="border border-slate-200 px-4 py-4 ${diffS < 0 ? 'text-red-600' : 'text-green-600'}">${diffS.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
                         <td class="border border-slate-200 px-2 py-2 print:hidden">
-                            <button onclick="event.stopPropagation(); if(window.currentUserIsAdmin && confirm('Excluir meta?')){ db.depositaryTargets=db.depositaryTargets.filter(t=>!(t.owner==='${d.owner}' && t.warehouse==='${d.warehouse}')); if(window.saveSettingsToFirebase) window.saveSettingsToFirebase('depositaryTargets', db.depositaryTargets); saveToDB() }" class="text-slate-300 hover:text-red-500 transition-colors admin-only">
-                                <i data-lucide="trash-2" size="14"></i>
-                            </button>
+                            <div class="flex items-center justify-center gap-2">
+                                <button onclick="event.stopPropagation(); showDepositaryDetails(${ownerArg}, ${warehouseArg})" class="text-slate-400 hover:text-slate-700 transition-colors" title="Ver tickets e romaneios">
+                                    <i data-lucide="list" size="14"></i>
+                                </button>
+                                <button onclick="event.stopPropagation(); if(window.currentUserIsAdmin && confirm('Excluir meta?')){ db.depositaryTargets=db.depositaryTargets.filter(t=>!(t.owner==='${d.owner}' && t.warehouse==='${d.warehouse}')); if(window.saveSettingsToFirebase) window.saveSettingsToFirebase('depositaryTargets', db.depositaryTargets); saveToDB() }" class="text-slate-300 hover:text-red-500 transition-colors admin-only" title="Excluir meta">
+                                    <i data-lucide="trash-2" size="14"></i>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 `;
