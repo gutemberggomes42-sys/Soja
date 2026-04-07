@@ -235,6 +235,24 @@
             alert(message);
         };
 
+        function sanitizeForFirestore(value) {
+            if (Array.isArray(value)) {
+                const arr = value.map(v => sanitizeForFirestore(v)).filter(v => v !== undefined);
+                return arr;
+            }
+            if (value && typeof value === 'object') {
+                const out = {};
+                Object.keys(value).forEach(k => {
+                    const v = value[k];
+                    if (v === undefined) return; // remove undefined keys
+                    out[k] = sanitizeForFirestore(v);
+                });
+                return out;
+            }
+            if (typeof value === 'number' && !isFinite(value)) return 0;
+            return value;
+        }
+
         window.saveEntryToFirebase = async (entry) => {
             if (!auth.currentUser) {
                 console.warn("Save attempted without authentication");
@@ -245,7 +263,8 @@
             try {
                 if (statusEl) statusEl.innerText = 'Sincronizando...';
                 // Salva documento individual usando ID como nome
-                await setDoc(doc(firestore, "harvest_entries", String(entry.id)), entry);
+                const cleanEntry = sanitizeForFirestore(entry);
+                await setDoc(doc(firestore, "harvest_entries", String(entry.id)), cleanEntry);
                 if (statusEl) statusEl.innerText = 'Sincronizado';
                 console.log(`Firebase Entry Saved: ${entry.id}`);
                 return true;
