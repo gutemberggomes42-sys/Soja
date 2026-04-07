@@ -4900,6 +4900,8 @@
             const isThirdPartyStorage = (entry) => removeAccents(String(entry.operation || entry.obs || '')).toUpperCase().includes('ARMAZENAMENTO DE TERCEIROS');
             const ownerKey = owner === 'NÃO DEFINIDO' ? '---' : owner;
             const warehouseKey = warehouse === 'NÃO DEFINIDO' ? '---' : warehouse;
+            const ownerArg = `'${String(owner).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+            const warehouseArg = `'${String(warehouse).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 
             const items = db.entries
                 .filter(e => e.farm !== '---' && e.farm && !isThirdPartyStorage(e))
@@ -4921,7 +4923,10 @@
 
             const rows = items.map(e => {
                 const adminActions = window.currentUserIsAdmin ? `
-                    <button onclick="openEditModal(${e.id})" class="px-2 py-1 rounded-lg bg-amber-100 text-amber-800 text-[10px] font-black uppercase">Editar</button>
+                    <div class="flex items-center justify-end gap-2">
+                        <button onclick="openEditModal(${e.id})" class="px-2 py-1 rounded-lg bg-amber-100 text-amber-800 text-[10px] font-black uppercase">Editar</button>
+                        <button onclick="deleteEntryAndRefreshDepositaryModal(${e.id}, ${ownerArg}, ${warehouseArg})" class="px-2 py-1 rounded-lg bg-red-600 text-white text-[10px] font-black uppercase">Excluir</button>
+                    </div>
                 ` : '';
                 return `
                     <tr class="hover:bg-slate-50">
@@ -4971,6 +4976,15 @@
             `;
 
             document.body.appendChild(html);
+        }
+
+        window.deleteEntryAndRefreshDepositaryModal = async function(id, owner, warehouse) {
+            if (!window.currentUserIsAdmin) return alert('Acesso negado.');
+            if (!confirm('Excluir esta carga?')) return;
+            if (window.deleteEntryFromFirebase) await window.deleteEntryFromFirebase(id);
+            db.entries = db.entries.filter(x => x.id !== id);
+            saveToDB();
+            window.showDepositaryDetails(owner, warehouse);
         }
 
         // INIT
