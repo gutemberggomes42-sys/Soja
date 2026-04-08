@@ -634,6 +634,7 @@
                 <div>
                     <p class="text-xs text-blue-100 font-bold uppercase tracking-widest">Total Geral Acumulado</p>
                     <p class="text-2xl font-black leading-none"><span id="total-sacks-val">0</span> <span class="text-sm font-normal">sacos</span></p>
+                    <p id="total-kg-header" class="text-[10px] text-blue-100 font-bold mt-1">0,00 kg liquidos</p>
                     <p id="sync-status" class="text-[8px] text-blue-300 font-black uppercase mt-1 tracking-tighter">Sincronizado</p>
                 </div>
             </div>
@@ -889,6 +890,7 @@
                             <div>
                                 <h3 class="font-black text-amber-900 flex items-center gap-2"><i data-lucide="eye"></i>Conferir Lançamentos</h3>
                                 <p class="text-xs text-amber-700 font-bold uppercase tracking-wider">Verifique os dados da planilha antes de confirmar</p>
+                                <div id="import-preview-summary" class="mt-3 flex flex-wrap gap-2"></div>
                             </div>
                             <div class="flex gap-2">
                                 <button onclick="clearImportPreview()" class="px-4 py-2 bg-white text-slate-600 rounded-xl text-xs font-black hover:bg-slate-100 border border-slate-200">CANCELAR</button>
@@ -2748,11 +2750,20 @@
                 const bruto = cleanNum(findCol(['Peso Bruto', 'BRUTO', 'P. BRUTO']));
                 const tara = cleanNum(findCol(['Peso Tara', 'TARA', 'P. TARA']));
                 const desc = cleanNum(findCol(['Peso Descontado', 'DESCONTO', 'DESC', 'P. DESC']));
-                let liquido = cleanNum(findCol(['Peso Liq.(Kg)', 'LIQUIDO', 'P. LIQ', 'PESO LIQUIDO', 'PESO LIQ']));
-                
-                // Validação matemática: Se o líquido da planilha não bater com Bruto - Tara - Desc, recalculamos
-                if (bruto > 0 && tara > 0 && Math.abs(bruto - tara - desc - liquido) > 1) {
-                    liquido = bruto - tara - desc;
+                const liquidoPlanilha = cleanNum(findCol(['Peso Liq.(Kg)', 'LIQUIDO', 'P. LIQ', 'PESO LIQUIDO', 'PESO LIQ']));
+                const liquidoCalculado = (bruto > 0 && tara > 0) ? (bruto - tara - desc) : 0;
+                let liquido = liquidoPlanilha;
+
+                // No Excel, priorizamos o liquido vindo da planilha.
+                // So recalculamos quando esse campo nao vier preenchido.
+                if (liquido <= 0 && liquidoCalculado > 0) {
+                    liquido = liquidoCalculado;
+                } else if (liquido > 0 && liquidoCalculado > 0 && Math.abs(liquidoCalculado - liquido) > 1) {
+                    console.warn('[processImportedJSON] Divergencia entre liquido da planilha e calculado:', {
+                        row,
+                        liquidoPlanilha,
+                        liquidoCalculado
+                    });
                 }
 
                 return {
@@ -2906,8 +2917,16 @@
         function renderImportPreview() {
             const section = document.getElementById('import-preview-section');
             const tbody = document.getElementById('import-preview-body');
+            const summary = document.getElementById('import-preview-summary');
             if (importPreviewData.length > 0) {
+                const totalKg = importPreviewData.reduce((acc, curr) => acc + (Number(curr.liquido) || 0), 0);
+                const totalSacks = totalKg / 60;
                 section.classList.remove('hidden');
+                summary.innerHTML = `
+                    <span class="px-3 py-1 rounded-full bg-white/80 border border-amber-200 text-[10px] font-black text-amber-900 uppercase tracking-widest">${importPreviewData.length} lancamentos</span>
+                    <span class="px-3 py-1 rounded-full bg-white/80 border border-amber-200 text-[10px] font-black text-amber-900 uppercase tracking-widest">${formatKgExact(totalKg)} kg</span>
+                    <span class="px-3 py-1 rounded-full bg-white/80 border border-amber-200 text-[10px] font-black text-amber-900 uppercase tracking-widest">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} sc</span>
+                `;
                 tbody.innerHTML = importPreviewData.map((e, idx) => {
                     const parts = extractRomaneioParts(e.romaneio);
                     const isDuplicate = db.entries.some(entry => {
@@ -2950,10 +2969,17 @@
                 `;
                 }).join('');
                 lucide.createIcons();
-            } else { section.classList.add('hidden'); }
+            } else {
+                section.classList.add('hidden');
+                summary.innerHTML = '';
+            }
         }
 
-        function clearImportPreview() { importPreviewData = []; document.getElementById('import-preview-section').classList.add('hidden'); }
+        function clearImportPreview() {
+            importPreviewData = [];
+            document.getElementById('import-preview-section').classList.add('hidden');
+            document.getElementById('import-preview-summary').innerHTML = '';
+        }
 
         function saveBulkEntries() {
             if (!window.currentUserIsAdmin) return alert('Acesso negado: Apenas o administrador pode realizar esta ação.');
@@ -3276,6 +3302,13 @@
             const parts = dateStr.split('-');
             if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
             return dateStr;
+        }
+
+        function formatKgExact(val) {
+            return (Number(val) || 0).toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
         }
 
 
@@ -3867,6 +3900,7 @@
             const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
             const totalSacks = totalKg / 60;
             document.getElementById('total-sacks-val').innerText = totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+            document.getElementById('total-kg-header').innerText = `${formatKgExact(totalKg)} kg liquidos`;
 
             const farmFilter = removeAccents(document.getElementById('filter-harvest-farm')?.value || '').toUpperCase();
             const varietyFilter = removeAccents(document.getElementById('filter-harvest-variety')?.value || '').toUpperCase();
@@ -3879,10 +3913,14 @@
 
             // Resumo para Impressão
             const printSummary = `
-                <div class="hidden print:grid grid-cols-3 gap-4 mb-6 border-2 border-slate-100 p-4 rounded-xl">
+                <div class="hidden print:grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 border-2 border-slate-100 p-4 rounded-xl">
                     <div>
                         <p class="text-[8px] font-black text-slate-400 uppercase">Total de Cargas</p>
                         <p class="text-sm font-black text-slate-800">${filteredEntries.length}</p>
+                    </div>
+                    <div>
+                        <p class="text-[8px] font-black text-slate-400 uppercase">Peso Total (kg)</p>
+                        <p class="text-sm font-black text-slate-800">${formatKgExact(filteredEntries.reduce((a,b)=>a+b.liquido,0))} kg</p>
                     </div>
                     <div>
                         <p class="text-[8px] font-black text-slate-400 uppercase">Peso Total (T)</p>
@@ -4386,7 +4424,8 @@
                 <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 group hover:border-blue-200 transition-colors">
                     <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produção Total</p>
                     <h4 class="text-2xl font-black text-slate-800">${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4>
-                    <div class="mt-2 flex items-center gap-1 text-[9px] text-blue-600 font-bold">
+                    <p class="mt-2 text-[9px] text-blue-600 font-bold">${formatKgExact(totalKg)} kg liquidos</p>
+                    <div class="mt-1 flex items-center gap-1 text-[9px] text-blue-600 font-bold">
                         <i data-lucide="trending-up" size="10"></i> Safra 25/26
                     </div>
                 </div>
