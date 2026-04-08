@@ -1848,6 +1848,11 @@
             return removeAccents(String(value || '')).toUpperCase().trim();
         }
 
+        function hasRealText(value) {
+            const normalized = normalizeCompareText(value);
+            return normalized !== '' && normalized !== '---';
+        }
+
         function isPlaceholderHarvestEntry(entry) {
             return !entry || !entry.farm || entry.farm === '---' || !Number(entry.liquido);
         }
@@ -1868,9 +1873,14 @@
             const sameFarm = normalizeCompareText(existingEntry.farm) === normalizeCompareText(incomingEntry.farm);
             const sameOwner = normalizeCompareText(existingEntry.owner) === normalizeCompareText(incomingEntry.owner);
             const sameWarehouse = normalizeCompareText(existingEntry.warehouse) === normalizeCompareText(incomingEntry.warehouse);
+            const comparableOwners = hasRealText(existingEntry.owner) && hasRealText(incomingEntry.owner);
 
-            if (romaneioMatch && ticketMatch) return true;
-            if (romaneioMatch && sameDate && sameWeight) return true;
+            // Se ambos os registros já têm depositário definido e são diferentes,
+            // tratamos como cargas distintas, mesmo compartilhando romaneio/ticket.
+            if (comparableOwners && !sameOwner) return false;
+
+            if (romaneioMatch && ticketMatch && sameDate && sameWeight) return true;
+            if (romaneioMatch && sameDate && sameWeight && (sameOwner || sameFarm || sameWarehouse)) return true;
             if (ticketMatch && sameDate && sameWeight && (sameFarm || sameOwner || sameWarehouse)) return true;
             if (romaneioMatch && (isPlaceholderHarvestEntry(existingEntry) || isPlaceholderHarvestEntry(incomingEntry))) return true;
 
@@ -1878,7 +1888,14 @@
         }
 
         function findExistingHarvestEntryIndex(incomingEntry) {
-            return db.entries.findIndex(existingEntry => isSameHarvestEntry(existingEntry, incomingEntry));
+            const exactIdx = db.entries.findIndex(existingEntry =>
+                !isPlaceholderHarvestEntry(existingEntry) && isSameHarvestEntry(existingEntry, incomingEntry)
+            );
+            if (exactIdx !== -1) return exactIdx;
+
+            return db.entries.findIndex(existingEntry =>
+                isPlaceholderHarvestEntry(existingEntry) && isSameHarvestEntry(existingEntry, incomingEntry)
+            );
         }
 
         window.rebuildDerivedLists = () => {
@@ -1948,34 +1965,8 @@
                         // Verifica cada candidato para ver se é REALMENTE duplicado
                         for (const idx of candidates) {
                             const candidate = uniqueEntries[idx];
-                            
-                            // Extrai tickets normalizados (apenas números)
-                            const t1 = String(entry.ticket || '').replace(/\D/g, '');
-                            const t2 = String(candidate.ticket || '').replace(/\D/g, '');
-                            
-                            const entryPlaceholder = !entry.farm || entry.farm === '---' || !entry.liquido || entry.liquido === 0;
-                            const candidatePlaceholder = !candidate.farm || candidate.farm === '---' || !candidate.liquido || candidate.liquido === 0;
-                            
-                            if (t1 && t2) {
-                                if (t1 !== t2) continue;
-                                isDuplicate = true;
-                                originalEntryIdx = idx;
-                                break;
-                            }
-                            
-                            if (entryPlaceholder || candidatePlaceholder) {
-                                isDuplicate = true;
-                                originalEntryIdx = idx;
-                                break;
-                            }
-                            
-                            const sameDate = String(entry.date || '') === String(candidate.date || '');
-                            const sameFarm = removeAccents(String(entry.farm || '')).toUpperCase() === removeAccents(String(candidate.farm || '')).toUpperCase();
-                            const sameOwner = removeAccents(String(entry.owner || '')).toUpperCase() === removeAccents(String(candidate.owner || '')).toUpperCase();
-                            const sameWh = removeAccents(String(entry.warehouse || '')).toUpperCase() === removeAccents(String(candidate.warehouse || '')).toUpperCase();
-                            const sameWeight = Math.abs((Number(entry.liquido) || 0) - (Number(candidate.liquido) || 0)) <= 1;
-                            
-                            if (sameDate && sameFarm && sameOwner && sameWh && sameWeight) {
+
+                            if (isSameHarvestEntry(candidate, entry)) {
                                 isDuplicate = true;
                                 originalEntryIdx = idx;
                                 break;
@@ -2998,11 +2989,7 @@
                     <span class="px-3 py-1 rounded-full bg-white/80 border border-amber-200 text-[10px] font-black text-amber-900 uppercase tracking-widest">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} sc</span>
                 `;
                 tbody.innerHTML = importPreviewData.map((e, idx) => {
-                    const parts = extractRomaneioParts(e.romaneio);
-                    const isDuplicate = db.entries.some(entry => {
-                        const entryParts = extractRomaneioParts(entry.romaneio);
-                        return entry.farm !== '---' && parts.some(p => entryParts.includes(p));
-                    });
+                    const isDuplicate = db.entries.some(entry => isSameHarvestEntry(entry, e) && !isPlaceholderHarvestEntry(entry));
 
                     return `
                         <tr class="${isDuplicate ? 'bg-red-50 opacity-60' : 'hover:bg-amber-100/50'} text-[10px] transition-all">
@@ -3344,14 +3331,6 @@
             e.preventDefault();
             if (!window.currentUserIsAdmin) return alert('Acesso negado: Apenas o administrador pode realizar esta ação.');
             const romaneioNum = document.getElementById('form-romaneio').value.trim();
-            const newParts = extractRomaneioParts(romaneioNum);
-            
-            // Busca se já existe um registro deste romaneio (mesmo que seja um placeholder do Registro Rápido)
-            // Agora verifica se QUALQUER parte do novo romaneio existe em QUALQUER registro
-            const existingIdx = db.entries.findIndex(entry => {
-                const entryParts = extractRomaneioParts(entry.romaneio);
-                return newParts.some(p => entryParts.includes(p));
-            });
             
             const entryData = {
                 date: document.getElementById('form-date').value,
@@ -3371,14 +3350,11 @@
                 viaAzul: parseInt(document.getElementById('form-via-azul').value)
             };
 
+            const existingIdx = findExistingHarvestEntryIndex(entryData);
+
             let finalEntry;
 
             if (existingIdx !== -1) {
-                const foundRom = db.entries[existingIdx].romaneio;
-                const isPlaceholder = db.entries[existingIdx].farm === '---' || !db.entries[existingIdx].farm;
-                
-                // Se o romaneio já existe e NÃO é um placeholder, significa que estamos editando um registro existente.
-                // Ou se for um placeholder, estamos completando-o.
                 const currentEntry = db.entries[existingIdx];
                 finalEntry = {
                     ...currentEntry, // Mantém o ID original e outras propriedades
