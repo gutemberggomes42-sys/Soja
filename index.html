@@ -1853,6 +1853,18 @@
             return normalized !== '' && normalized !== '---';
         }
 
+        function hasPositiveHarvestWeight(entry) {
+            return (Number(entry?.liquido) || 0) > 0;
+        }
+
+        function getEntryFarmLabel(entry) {
+            return hasRealText(entry?.farm) ? String(entry.farm).trim() : 'NÃO INFORMADA';
+        }
+
+        function getEntryVarietyLabel(entry) {
+            return hasRealText(entry?.variety) ? String(entry.variety).trim() : 'NÃO INFORMADA';
+        }
+
         function isPlaceholderHarvestEntry(entry) {
             return !entry || !entry.farm || entry.farm === '---' || !Number(entry.liquido);
         }
@@ -3870,8 +3882,7 @@
         }
 
         function renderHarvest() {
-            // Filtra apenas entradas REAIS (que já têm fazenda lançada)
-            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+            const realEntries = db.entries.filter(hasPositiveHarvestWeight);
             
             const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
             const totalSacks = totalKg / 60;
@@ -3882,8 +3893,10 @@
             const varietyFilter = removeAccents(document.getElementById('filter-harvest-variety')?.value || '').toUpperCase();
 
             const filteredEntries = realEntries.filter(e => {
-                const matchesFarm = !farmFilter || removeAccents(e.farm).toUpperCase().includes(farmFilter) || removeAccents(e.romaneio).toUpperCase().includes(farmFilter);
-                const matchesVariety = !varietyFilter || removeAccents(e.variety).toUpperCase().includes(varietyFilter) || removeAccents(e.team).toUpperCase().includes(varietyFilter);
+                const farmLabel = getEntryFarmLabel(e);
+                const varietyLabel = getEntryVarietyLabel(e);
+                const matchesFarm = !farmFilter || removeAccents(farmLabel).toUpperCase().includes(farmFilter) || removeAccents(e.romaneio).toUpperCase().includes(farmFilter);
+                const matchesVariety = !varietyFilter || removeAccents(varietyLabel).toUpperCase().includes(varietyFilter) || removeAccents(e.team).toUpperCase().includes(varietyFilter);
                 return matchesFarm && matchesVariety;
             });
 
@@ -3923,9 +3936,10 @@
                         </div>
                     </td>
                     <td class="px-6 py-4">
-                        <div class="font-black text-slate-800 uppercase">${e.farm}</div>
-                        <div class="text-[10px] text-slate-500 font-bold uppercase">${e.variety} • ${e.team}</div>
+                        <div class="font-black text-slate-800 uppercase">${getEntryFarmLabel(e)}</div>
+                        <div class="text-[10px] text-slate-500 font-bold uppercase">${getEntryVarietyLabel(e)} • ${e.team}</div>
                         <div class="text-[9px] text-indigo-500 font-medium">${e.warehouse} • ${e.owner}</div>
+                        ${!hasRealText(e.farm) ? '<div class="text-[9px] text-amber-600 font-black mt-1">Fazenda não informada no arquivo</div>' : ''}
                         ${e.obs && e.obs !== '---' ? `<div class="text-[9px] text-slate-400 italic mt-1 border-l-2 border-slate-200 pl-2">Obs: ${e.obs}</div>` : ''}
                     </td>
                     <td class="px-6 py-4 text-right font-black text-slate-700">
@@ -4388,11 +4402,13 @@
         let charts = {};
 
         function renderDashboard() {
-            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+            const realEntries = db.entries.filter(hasPositiveHarvestWeight);
+            const mappedEntries = realEntries.filter(e => hasRealText(e.farm));
+            const missingFarmEntries = realEntries.filter(e => !hasRealText(e.farm));
             const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
             const totalSacks = totalKg / 60;
             const totalArea = db.farmAreas.reduce((acc, curr) => acc + curr.area, 0);
-            const avgProd = totalArea > 0 ? totalSacks / totalArea : 0;
+            const avgProd = totalArea > 0 ? (mappedEntries.reduce((acc, curr) => acc + curr.liquido, 0) / 60) / totalArea : 0;
 
             console.log("Dashboard Totals - Total Kg:", totalKg, "Total Sacos:", totalSacks);
 
@@ -4401,6 +4417,7 @@
                     <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produção Total</p>
                     <h4 class="text-2xl font-black text-slate-800">${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4>
                     <p class="mt-2 text-[9px] text-blue-600 font-bold">${formatKgExact(totalKg)} kg liquidos</p>
+                    <p class="mt-1 text-[9px] text-amber-600 font-bold">${missingFarmEntries.length > 0 ? `${missingFarmEntries.length} cargas sem fazenda foram somadas no total` : 'Todas as cargas do total possuem fazenda'}</p>
                     <div class="mt-1 flex items-center gap-1 text-[9px] text-blue-600 font-bold">
                         <i data-lucide="trending-up" size="10"></i> Safra 25/26
                     </div>
@@ -4424,7 +4441,7 @@
 
             const groups = {};
             realEntries.forEach(e => { 
-                const k = `${e.farm}-${e.variety}`; 
+                const k = `${getEntryFarmLabel(e)}-${getEntryVarietyLabel(e)}`; 
                 groups[k] = (groups[k] || 0) + e.liquido; 
             });
             
@@ -4448,7 +4465,8 @@
             // 1. Produção por Fazenda (Bar Chart)
             const farmData = {};
             entries.forEach(e => {
-                farmData[e.farm] = (farmData[e.farm] || 0) + (e.liquido / 1000);
+                const farmLabel = getEntryFarmLabel(e);
+                farmData[farmLabel] = (farmData[farmLabel] || 0) + (e.liquido / 1000);
             });
             const sortedFarms = Object.entries(farmData).sort((a,b) => b[1] - a[1]).slice(0, 8);
             
@@ -4495,7 +4513,8 @@
             // 3. Distribuição por Variedade (Doughnut Chart)
             const varietyData = {};
             entries.forEach(e => {
-                varietyData[e.variety] = (varietyData[e.variety] || 0) + e.liquido;
+                const varietyLabel = getEntryVarietyLabel(e);
+                varietyData[varietyLabel] = (varietyData[varietyLabel] || 0) + e.liquido;
             });
             const topVarieties = Object.entries(varietyData).sort((a,b) => b[1] - a[1]).slice(0, 5);
 
@@ -4558,7 +4577,7 @@
 
         function renderDeposits() {
             const isThirdPartyStorage = (entry) => removeAccents(String(entry.operation || entry.obs || '')).toUpperCase().includes('ARMAZENAMENTO DE TERCEIROS');
-            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm && !isThirdPartyStorage(e));
+            const realEntries = db.entries.filter(e => hasPositiveHarvestWeight(e) && !isThirdPartyStorage(e));
             const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
             
             console.log("Deposits Totals - Total Kg:", totalKg, "Total Sacos:", totalKg / 60);
@@ -4895,7 +4914,7 @@
             
             // Filtra apenas entradas REAIS
             const isThirdPartyStorage = (entry) => removeAccents(String(entry.operation || entry.obs || '')).toUpperCase().includes('ARMAZENAMENTO DE TERCEIROS');
-            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm && !isThirdPartyStorage(e));
+            const realEntries = db.entries.filter(e => hasPositiveHarvestWeight(e) && !isThirdPartyStorage(e));
 
             realEntries.forEach(e => {
                 const ownerName = e.owner && e.owner !== '---' ? e.owner : 'NÃO DEFINIDO';
@@ -4967,7 +4986,7 @@
             const warehouseArg = `'${String(warehouse).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 
             const items = db.entries
-                .filter(e => e.farm !== '---' && e.farm && !isThirdPartyStorage(e))
+                .filter(e => hasPositiveHarvestWeight(e) && !isThirdPartyStorage(e))
                 .filter(e => {
                     const eOwner = e.owner && e.owner !== '---' ? e.owner : '---';
                     const eWh = e.warehouse && e.warehouse !== '---' ? e.warehouse : '---';
@@ -5058,7 +5077,7 @@
             const ownerKey = owner === 'NÃO DEFINIDO' ? '---' : owner;
             const warehouseKey = warehouse === 'NÃO DEFINIDO' ? '---' : warehouse;
             const items = db.entries
-                .filter(e => e.farm !== '---' && e.farm && !isThirdPartyStorage(e))
+                .filter(e => hasPositiveHarvestWeight(e) && !isThirdPartyStorage(e))
                 .filter(e => {
                     const eOwner = e.owner && e.owner !== '---' ? e.owner : '---';
                     const eWh = e.warehouse && e.warehouse !== '---' ? e.warehouse : '---';
