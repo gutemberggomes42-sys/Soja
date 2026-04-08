@@ -3290,6 +3290,89 @@
             return map[field] || field;
         }
 
+        window.showMissingFarmEntries = function() {
+            const items = db.entries
+                .filter(e => hasPositiveHarvestWeight(e) && !hasRealText(e.farm))
+                .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+            if (items.length === 0) {
+                alert('Nenhuma carga sem fazenda encontrada.');
+                return;
+            }
+
+            const modalId = 'missing-farm-modal';
+            const existing = document.getElementById(modalId);
+            if (existing) existing.remove();
+
+            const totalKg = items.reduce((acc, item) => acc + (Number(item.liquido) || 0), 0);
+            const rows = items.map(item => {
+                const editAction = window.currentUserIsAdmin
+                    ? `<button onclick="openEditModal(${item.id})" class="px-2 py-1 rounded-lg bg-amber-100 text-amber-800 text-[10px] font-black uppercase">Editar</button>`
+                    : '';
+
+                return `
+                    <tr class="hover:bg-slate-50">
+                        <td class="px-4 py-3 text-[10px] font-bold text-slate-500">${item.date ? new Date(item.date).toLocaleDateString('pt-BR') : '---'}</td>
+                        <td class="px-4 py-3">
+                            <div class="font-mono text-[11px] font-black text-slate-700">${item.romaneio || '---'}</div>
+                            <div class="text-[9px] text-slate-400">Tkt: ${item.ticket || '---'}</div>
+                        </td>
+                        <td class="px-4 py-3 text-[10px] font-black uppercase text-slate-700">${item.owner || '---'}</td>
+                        <td class="px-4 py-3 text-[10px] font-bold uppercase text-slate-500">${item.warehouse || '---'}</td>
+                        <td class="px-4 py-3 text-[10px] font-bold uppercase text-slate-500">${getEntryVarietyLabel(item)} • ${item.team || '---'}</td>
+                        <td class="px-4 py-3 text-right text-[11px] font-black text-slate-800">${(Number(item.liquido) || 0).toLocaleString('pt-BR')} kg</td>
+                        <td class="px-4 py-3 text-right">${editAction}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            const modalHtml = `
+                <div id="${modalId}" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h2 class="text-2xl font-bold text-slate-800">Cargas Sem Fazenda</h2>
+                                <p class="text-sm text-slate-500 mt-1">${items.length} cargas • ${formatKgExact(totalKg)} kg</p>
+                            </div>
+                            <button onclick="document.getElementById('${modalId}').remove()" class="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                                <i data-lucide="x" class="w-6 h-6 text-slate-500"></i>
+                            </button>
+                        </div>
+
+                        <div class="p-6 border-b border-slate-100 bg-amber-50 text-amber-800 text-xs font-bold uppercase tracking-widest">
+                            Essas cargas entram no total do dashboard, mas precisam de fazenda para ficarem mapeadas corretamente.
+                        </div>
+
+                        <div class="flex-1 overflow-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead class="sticky top-0 bg-white border-b border-slate-100">
+                                    <tr class="text-slate-400 font-black text-[10px] uppercase tracking-widest">
+                                        <th class="px-4 py-3">Data</th>
+                                        <th class="px-4 py-3">Romaneio / Ticket</th>
+                                        <th class="px-4 py-3">Depositário</th>
+                                        <th class="px-4 py-3">Armazém</th>
+                                        <th class="px-4 py-3">Variedade / Equipe</th>
+                                        <th class="px-4 py-3 text-right">Líquido</th>
+                                        <th class="px-4 py-3 text-right">Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">${rows}</tbody>
+                            </table>
+                        </div>
+
+                        <div class="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+                            <button onclick="document.getElementById('${modalId}').remove()" class="bg-slate-900 text-white px-6 py-2 rounded-lg hover:bg-slate-800 transition-colors font-medium">
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            lucide.createIcons();
+        };
+
         function formatValue(val) {
             if (val === null || val === undefined) return '---';
             if (typeof val === 'boolean') return val ? 'Sim' : 'Não';
@@ -4417,7 +4500,12 @@
                     <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produção Total</p>
                     <h4 class="text-2xl font-black text-slate-800">${(totalKg/1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} T</h4>
                     <p class="mt-2 text-[9px] text-blue-600 font-bold">${formatKgExact(totalKg)} kg liquidos</p>
-                    <p class="mt-1 text-[9px] text-amber-600 font-bold">${missingFarmEntries.length > 0 ? `${missingFarmEntries.length} cargas sem fazenda foram somadas no total` : 'Todas as cargas do total possuem fazenda'}</p>
+                    ${missingFarmEntries.length > 0 ? `
+                    <button onclick="showMissingFarmEntries()" class="mt-1 inline-flex items-center gap-1 text-[9px] text-amber-600 font-bold hover:text-amber-700 transition-colors">
+                        <i data-lucide="list" size="10"></i>
+                        ${missingFarmEntries.length} cargas sem fazenda foram somadas no total
+                    </button>
+                    ` : `<p class="mt-1 text-[9px] text-emerald-600 font-bold">Todas as cargas do total possuem fazenda</p>`}
                     <div class="mt-1 flex items-center gap-1 text-[9px] text-blue-600 font-bold">
                         <i data-lucide="trending-up" size="10"></i> Safra 25/26
                     </div>
