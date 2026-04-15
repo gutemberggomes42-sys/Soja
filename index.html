@@ -11,7 +11,7 @@
     <!-- Tesseract.js para OCR -->
     <script src="https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
     <!-- SheetJS para leitura de Excel -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="./vendor/xlsx.full.min.js"></script>
     <!-- PDF.js para leitura de PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
@@ -2042,6 +2042,17 @@
             renderAll(); 
         }
 
+        function readExcelFirstSheetJson(arrayBuffer) {
+            if (!window.XLSX) {
+                throw new Error('Biblioteca de Excel não carregada. Recarregue a página e tente novamente.');
+            }
+
+            const data = new Uint8Array(arrayBuffer);
+            const workbook = window.XLSX.read(data, { type: 'array' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            return window.XLSX.utils.sheet_to_json(firstSheet);
+        }
+
         // IMPORTAÇÃO (EXCEL OU IMAGEM)
         async function handleFileImport(input) {
             if (!input.files || !input.files[0]) return;
@@ -2057,12 +2068,15 @@
                 statusText.innerText = 'Lendo Excel...';
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const json = XLSX.utils.sheet_to_json(firstSheet);
-                    processImportedJSON(json);
-                    loader.classList.add('hidden');
+                    try {
+                        const json = readExcelFirstSheetJson(e.target.result);
+                        processImportedJSON(json);
+                    } catch (error) {
+                        console.error('Erro ao ler Excel da colheita:', error);
+                        alert(error.message || 'Não foi possível ler a planilha.');
+                    } finally {
+                        loader.classList.add('hidden');
+                    }
                 };
                 reader.readAsArrayBuffer(file);
             } else {
@@ -2106,12 +2120,15 @@
                     statusText.innerText = 'Lendo Excel...';
                     const reader = new FileReader();
                     reader.onload = (e) => {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const json = XLSX.utils.sheet_to_json(firstSheet);
-                        processReconciliationExcel(json);
-                        loader.classList.add('hidden');
+                        try {
+                            const json = readExcelFirstSheetJson(e.target.result);
+                            processReconciliationExcel(json);
+                        } catch (error) {
+                            console.error('Erro ao ler Excel da conferência:', error);
+                            alert(error.message || 'Não foi possível ler a planilha.');
+                        } finally {
+                            loader.classList.add('hidden');
+                        }
                     };
                     reader.readAsArrayBuffer(file);
                 } else if (file.name.match(/\.pdf$/)) {
@@ -2535,12 +2552,15 @@
                     statusText.innerText = 'Lendo Excel...';
                     const reader = new FileReader();
                     reader.onload = (e) => {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const json = XLSX.utils.sheet_to_json(firstSheet);
-                        processDepositaryExcel(json);
-                        loader.classList.add('hidden');
+                        try {
+                            const json = readExcelFirstSheetJson(e.target.result);
+                            processDepositaryExcel(json);
+                        } catch (error) {
+                            console.error('Erro ao ler Excel de depositário:', error);
+                            alert(error.message || 'Não foi possível ler a planilha.');
+                        } finally {
+                            loader.classList.add('hidden');
+                        }
                     };
                     reader.readAsArrayBuffer(file);
                 } else if (file.name.match(/\.pdf$/)) {
@@ -3306,8 +3326,13 @@
 
             const totalKg = items.reduce((acc, item) => acc + (Number(item.liquido) || 0), 0);
             const rows = items.map(item => {
-                const editAction = window.currentUserIsAdmin
-                    ? `<button onclick="openEditModal(${item.id})" class="px-2 py-1 rounded-lg bg-amber-100 text-amber-800 text-[10px] font-black uppercase">Editar</button>`
+                const actions = window.currentUserIsAdmin
+                    ? `
+                    <div class="flex items-center justify-end gap-2">
+                        <button onclick="openEditModal(${item.id})" class="px-2 py-1 rounded-lg bg-amber-100 text-amber-800 text-[10px] font-black uppercase">Editar</button>
+                        <button onclick="deleteEntryAndRefreshMissingFarmModal(${item.id})" class="px-2 py-1 rounded-lg bg-red-600 text-white text-[10px] font-black uppercase">Excluir</button>
+                    </div>
+                    `
                     : '';
 
                 return `
@@ -3321,7 +3346,7 @@
                         <td class="px-4 py-3 text-[10px] font-bold uppercase text-slate-500">${item.warehouse || '---'}</td>
                         <td class="px-4 py-3 text-[10px] font-bold uppercase text-slate-500">${getEntryVarietyLabel(item)} • ${item.team || '---'}</td>
                         <td class="px-4 py-3 text-right text-[11px] font-black text-slate-800">${(Number(item.liquido) || 0).toLocaleString('pt-BR')} kg</td>
-                        <td class="px-4 py-3 text-right">${editAction}</td>
+                        <td class="px-4 py-3 text-right">${actions}</td>
                     </tr>
                 `;
             }).join('');
@@ -3371,6 +3396,23 @@
 
             document.body.insertAdjacentHTML('beforeend', modalHtml);
             lucide.createIcons();
+        };
+
+        window.deleteEntryAndRefreshMissingFarmModal = async function(id) {
+            if (!window.currentUserIsAdmin) return alert('Acesso negado.');
+            if (!confirm('Excluir esta carga sem fazenda?')) return;
+
+            if (window.deleteEntryFromFirebase) await window.deleteEntryFromFirebase(id);
+            db.entries = db.entries.filter(x => x.id !== id);
+            saveToDB();
+
+            const remaining = db.entries.filter(e => hasPositiveHarvestWeight(e) && !hasRealText(e.farm));
+            const modal = document.getElementById('missing-farm-modal');
+            if (modal) modal.remove();
+
+            if (remaining.length > 0) {
+                window.showMissingFarmEntries();
+            }
         };
 
         function formatValue(val) {
