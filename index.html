@@ -1874,23 +1874,60 @@
             return !entry || !entry.farm || entry.farm === '---' || !Number(entry.liquido);
         }
 
+        function getHarvestMatchContext(existingEntry, incomingEntry) {
+            const existingParts = extractRomaneioParts(existingEntry?.romaneio);
+            const incomingParts = extractRomaneioParts(incomingEntry?.romaneio);
+            const romaneioMatch = existingParts.length > 0 && incomingParts.some(part => existingParts.includes(part));
+
+            const existingTicket = normalizeDigits(existingEntry?.ticket);
+            const incomingTicket = normalizeDigits(incomingEntry?.ticket);
+            const ticketMatch = existingTicket && incomingTicket && existingTicket === incomingTicket;
+
+            const existingDate = String(existingEntry?.date || '').trim();
+            const incomingDate = String(incomingEntry?.date || '').trim();
+            const sameDate = existingDate !== '' && incomingDate !== '' && existingDate === incomingDate;
+            const dateCompatible = sameDate || existingDate === '' || incomingDate === '';
+
+            const sameWeight = Math.abs((Number(existingEntry?.liquido) || 0) - (Number(incomingEntry?.liquido) || 0)) <= 1;
+            const weightDiff = Math.abs((Number(existingEntry?.liquido) || 0) - (Number(incomingEntry?.liquido) || 0));
+            const sameFarm = normalizeCompareText(existingEntry?.farm) === normalizeCompareText(incomingEntry?.farm);
+            const sameOwner = normalizeCompareText(existingEntry?.owner) === normalizeCompareText(incomingEntry?.owner);
+            const sameWarehouse = normalizeCompareText(existingEntry?.warehouse) === normalizeCompareText(incomingEntry?.warehouse);
+            const comparableOwners = hasRealText(existingEntry?.owner) && hasRealText(incomingEntry?.owner);
+            const baseDocumentMatch = dateCompatible && (
+                (romaneioMatch && ticketMatch) ||
+                ticketMatch ||
+                romaneioMatch
+            );
+
+            return {
+                romaneioMatch,
+                ticketMatch,
+                sameDate,
+                dateCompatible,
+                sameWeight,
+                weightDiff,
+                sameFarm,
+                sameOwner,
+                sameWarehouse,
+                comparableOwners,
+                baseDocumentMatch
+            };
+        }
+
         function isSameHarvestEntry(existingEntry, incomingEntry) {
             if (!existingEntry || !incomingEntry) return false;
 
-            const existingParts = extractRomaneioParts(existingEntry.romaneio);
-            const incomingParts = extractRomaneioParts(incomingEntry.romaneio);
-            const romaneioMatch = existingParts.length > 0 && incomingParts.some(part => existingParts.includes(part));
-
-            const existingTicket = normalizeDigits(existingEntry.ticket);
-            const incomingTicket = normalizeDigits(incomingEntry.ticket);
-            const ticketMatch = existingTicket && incomingTicket && existingTicket === incomingTicket;
-
-            const sameDate = String(existingEntry.date || '') === String(incomingEntry.date || '');
-            const sameWeight = Math.abs((Number(existingEntry.liquido) || 0) - (Number(incomingEntry.liquido) || 0)) <= 1;
-            const sameFarm = normalizeCompareText(existingEntry.farm) === normalizeCompareText(incomingEntry.farm);
-            const sameOwner = normalizeCompareText(existingEntry.owner) === normalizeCompareText(incomingEntry.owner);
-            const sameWarehouse = normalizeCompareText(existingEntry.warehouse) === normalizeCompareText(incomingEntry.warehouse);
-            const comparableOwners = hasRealText(existingEntry.owner) && hasRealText(incomingEntry.owner);
+            const {
+                romaneioMatch,
+                ticketMatch,
+                sameDate,
+                sameWeight,
+                sameFarm,
+                sameOwner,
+                sameWarehouse,
+                comparableOwners
+            } = getHarvestMatchContext(existingEntry, incomingEntry);
 
             // Se ambos os registros já têm depositário definido e são diferentes,
             // tratamos como cargas distintas, mesmo compartilhando romaneio/ticket.
@@ -1913,6 +1950,85 @@
             return db.entries.findIndex(existingEntry =>
                 isPlaceholderHarvestEntry(existingEntry) && isSameHarvestEntry(existingEntry, incomingEntry)
             );
+        }
+
+        function scoreImportReconciliationCandidate(candidate, incomingEntry) {
+            const { context } = candidate;
+            let score = 0;
+
+            if (context.ticketMatch) score += 120;
+            if (context.romaneioMatch) score += 120;
+            if (context.dateCompatible) score += 60;
+            if (context.sameOwner) score += 50;
+            if (context.sameWarehouse) score += 35;
+            if (context.sameFarm) score += 25;
+            if (context.sameWeight) score += 40;
+            else if (context.weightDiff <= 60) score += 28;
+            else if (context.weightDiff <= 300) score += 18;
+            else if (context.weightDiff <= 1000) score += 8;
+
+            if (context.comparableOwners && !context.sameOwner) score -= 15;
+
+            return score;
+        }
+
+        function pickBestImportReconciliationCandidate(candidates, incomingEntry) {
+            if (!candidates || candidates.length === 0) return -1;
+
+            const ranked = candidates
+                .map(candidate => ({
+                    ...candidate,
+                    score: scoreImportReconciliationCandidate(candidate, incomingEntry)
+                }))
+                .sort((a, b) => b.score - a.score || a.context.weightDiff - b.context.weightDiff);
+
+            const best = ranked[0];
+            const second = ranked[1];
+            if (!best) return -1;
+
+            if (ranked.length === 1) return best.idx;
+            if (!second) return best.idx;
+            if (best.score >= second.score + 30) return best.idx;
+
+            return -1;
+        }
+
+        function findExistingHarvestEntryIndexForImport(incomingEntry, lockedEntryIds = new Set()) {
+            const strictIdx = db.entries.findIndex(existingEntry =>
+                !lockedEntryIds.has(String(existingEntry.id)) &&
+                !isPlaceholderHarvestEntry(existingEntry) &&
+                isSameHarvestEntry(existingEntry, incomingEntry)
+            );
+            if (strictIdx !== -1) return strictIdx;
+
+            const baseCandidates = db.entries
+                .map((existingEntry, idx) => ({
+                    existingEntry,
+                    idx,
+                    context: getHarvestMatchContext(existingEntry, incomingEntry)
+                }))
+                .filter(candidate =>
+                    !lockedEntryIds.has(String(candidate.existingEntry.id)) &&
+                    candidate.context.baseDocumentMatch
+                );
+
+            if (baseCandidates.length === 0) return -1;
+
+            const sameOwnerCandidates = baseCandidates.filter(candidate => candidate.context.sameOwner);
+            if (sameOwnerCandidates.length > 0) {
+                return pickBestImportReconciliationCandidate(sameOwnerCandidates, incomingEntry);
+            }
+
+            const sameFarmOrWarehouseCandidates = baseCandidates.filter(candidate =>
+                candidate.context.sameFarm || candidate.context.sameWarehouse
+            );
+            if (sameFarmOrWarehouseCandidates.length > 0) {
+                return pickBestImportReconciliationCandidate(sameFarmOrWarehouseCandidates, incomingEntry);
+            }
+
+            if (baseCandidates.length === 1) return baseCandidates[0].idx;
+
+            return pickBestImportReconciliationCandidate(baseCandidates, incomingEntry);
         }
 
         window.rebuildDerivedLists = () => {
@@ -3128,12 +3244,16 @@
                     <span class="px-3 py-1 rounded-full bg-white/80 border border-amber-200 text-[10px] font-black text-amber-900 uppercase tracking-widest">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} sc</span>
                 `;
                 tbody.innerHTML = importPreviewData.map((e, idx) => {
-                    const isDuplicate = db.entries.some(entry => isSameHarvestEntry(entry, e) && !isPlaceholderHarvestEntry(entry));
+                    const existingIdx = findExistingHarvestEntryIndexForImport(e);
+                    const isDuplicate = existingIdx !== -1;
+                    const duplicateLabel = isDuplicate ? (
+                        isSameHarvestEntry(db.entries[existingIdx], e) ? 'Ja lancado' : 'Vai atualizar'
+                    ) : '';
 
                     return `
                         <tr class="${isDuplicate ? 'bg-red-50 opacity-60' : 'hover:bg-amber-100/50'} text-[10px] transition-all">
                             <td class="px-2 py-3">
-                                ${isDuplicate ? '<span class="block text-[8px] text-red-500 font-black mb-1 uppercase">Já Lançado</span>' : ''}
+                                ${duplicateLabel ? `<span class="block text-[8px] text-red-500 font-black mb-1 uppercase">${duplicateLabel}</span>` : ''}
                                 <input type="text" value="${e.farm}" onchange="importPreviewData[${idx}].farm=this.value" class="bg-transparent w-full font-bold border-b border-amber-200 focus:border-amber-500 outline-none" title="Fazenda">
                                 <input type="text" value="${e.variety}" onchange="importPreviewData[${idx}].variety=this.value" class="bg-transparent w-full text-[8px] text-amber-600 mt-1 uppercase border-b border-transparent hover:border-amber-200 outline-none" title="Variedade">
                             </td>
@@ -3187,12 +3307,15 @@
             };
 
             if (confirm(`Deseja salvar os ${importPreviewData.length} registros da pré-visualização?`)) {
+                const lockedEntryIds = new Set();
+
                 for (const e of importPreviewData) {
-                    const existingIdx = findExistingHarvestEntryIndex(e);
+                    const existingIdx = findExistingHarvestEntryIndexForImport(e, lockedEntryIds);
 
                     if (existingIdx !== -1) {
                         // An existing entry was found, so we update it
                         const currentEntry = db.entries[existingIdx];
+                        lockedEntryIds.add(String(currentEntry.id));
                         
                         // Update existing entry with new data from import
                         const { id, ...importData } = e;
@@ -3263,6 +3386,7 @@
                         }];
                         
                         db.entries.push(e);
+                        lockedEntryIds.add(String(e.id));
                         if (window.saveEntryToFirebase) window.saveEntryToFirebase(e);
                         reportData.added.push(e);
                         console.log(`[saveBulkEntries] Added new entry: ID ${e.id}`);
