@@ -1869,6 +1869,14 @@
             return Number(entry?.liquido) || 0;
         }
 
+        function isThirdPartyStorageEntry(entry) {
+            return removeAccents(String(entry?.operation || entry?.obs || '')).toUpperCase().includes('ARMAZENAMENTO DE TERCEIROS');
+        }
+
+        function isRealProductionEntry(entry) {
+            return hasPositiveHarvestWeight(entry) && !isThirdPartyStorageEntry(entry);
+        }
+
         function getEntryFarmLabel(entry) {
             return hasRealText(entry?.farm) ? String(entry.farm).trim() : 'NÃO INFORMADA';
         }
@@ -3650,7 +3658,7 @@
 
         window.showMissingFarmEntries = function() {
             const items = db.entries
-                .filter(e => hasPositiveHarvestWeight(e) && !hasRealText(e.farm))
+                .filter(e => isRealProductionEntry(e) && !hasRealText(e.farm))
                 .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
             if (items.length === 0) {
@@ -3744,7 +3752,7 @@
             db.entries = db.entries.filter(x => x.id !== id);
             saveToDB();
 
-            const remaining = db.entries.filter(e => hasPositiveHarvestWeight(e) && !hasRealText(e.farm));
+            const remaining = db.entries.filter(e => isRealProductionEntry(e) && !hasRealText(e.farm));
             const modal = document.getElementById('missing-farm-modal');
             if (modal) modal.remove();
 
@@ -4138,7 +4146,7 @@
             const producer = farmInfo ? farmInfo.producer : 'SRM';
 
             // Calcula acumulado da fazenda
-            const farmEntries = db.entries.filter(e => e.farm === entry.farm);
+            const farmEntries = db.entries.filter(e => isRealProductionEntry(e) && e.farm === entry.farm);
             const totalKgFarm = farmEntries.reduce((acc, curr) => acc + curr.liquido, 0);
             const totalSacksFarm = totalKgFarm / 60;
 
@@ -4355,7 +4363,7 @@
         }
 
         function renderHarvest() {
-            const realEntries = db.entries.filter(hasPositiveHarvestWeight);
+            const realEntries = db.entries.filter(isRealProductionEntry);
             
             const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
             const totalSacks = totalKg / 60;
@@ -4891,7 +4899,8 @@
         let charts = {};
 
         function renderDashboard() {
-            const realEntries = db.entries.filter(hasPositiveHarvestWeight);
+            const realEntries = db.entries.filter(isRealProductionEntry);
+            const thirdPartyEntries = db.entries.filter(e => hasPositiveHarvestWeight(e) && isThirdPartyStorageEntry(e));
             const mappedEntries = realEntries.filter(e => hasRealText(e.farm));
             const missingFarmEntries = realEntries.filter(e => !hasRealText(e.farm));
             const totalKg = realEntries.reduce((acc, curr) => acc + curr.liquido, 0);
@@ -4912,6 +4921,7 @@
                         ${missingFarmEntries.length} cargas sem fazenda foram somadas no total
                     </button>
                     ` : `<p class="mt-1 text-[9px] text-emerald-600 font-bold">Todas as cargas do total possuem fazenda</p>`}
+                    ${thirdPartyEntries.length > 0 ? `<p class="mt-1 text-[9px] text-slate-500 font-bold">${thirdPartyEntries.length} cargas de armazenamento de terceiros ficaram fora da produção</p>` : ''}
                     <div class="mt-1 flex items-center gap-1 text-[9px] text-blue-600 font-bold">
                         <i data-lucide="trending-up" size="10"></i> Safra 25/26
                     </div>
@@ -5181,7 +5191,7 @@
             const dataMap = {};
 
             // Filtra apenas entradas REAIS
-            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+            const realEntries = db.entries.filter(e => isRealProductionEntry(e) && e.farm !== '---' && e.farm);
 
             realEntries.forEach(e => {
                 const teamName = e.team || 'Não Informada';
@@ -5292,7 +5302,7 @@
 
             // Soma colheitas reais usando busca inteligente
             // Filtra apenas entradas REAIS
-            const realEntries = db.entries.filter(e => e.farm !== '---' && e.farm);
+            const realEntries = db.entries.filter(e => isRealProductionEntry(e) && e.farm !== '---' && e.farm);
 
             realEntries.forEach(entry => {
                 const entryFarmCode = extractCode(entry.farm);
