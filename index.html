@@ -1877,6 +1877,22 @@
             return hasPositiveHarvestWeight(entry) && !isThirdPartyStorageEntry(entry);
         }
 
+        const CURRENT_HARVEST_SEASON = {
+            label: '25/26',
+            start: '2025-09-01',
+            end: '2026-08-31'
+        };
+
+        function isEntryInCurrentHarvestSeason(entry) {
+            const dateStr = String(entry?.date || '').trim();
+            if (!dateStr) return false;
+            return dateStr >= CURRENT_HARVEST_SEASON.start && dateStr <= CURRENT_HARVEST_SEASON.end;
+        }
+
+        function isCurrentSeasonProductionEntry(entry) {
+            return isRealProductionEntry(entry) && isEntryInCurrentHarvestSeason(entry);
+        }
+
         function getEntryFarmLabel(entry) {
             return hasRealText(entry?.farm) ? String(entry.farm).trim() : 'NÃO INFORMADA';
         }
@@ -1887,6 +1903,57 @@
 
         function isPlaceholderHarvestEntry(entry) {
             return !entry || !entry.farm || entry.farm === '---' || !Number(entry.liquido);
+        }
+
+        function getPrimaryRomaneioKey(entry) {
+            const parts = extractRomaneioParts(entry?.romaneio);
+            if (parts.length > 0) return String(parts[0]);
+            const digits = normalizeDigits(entry?.romaneio);
+            if (digits) return digits;
+            const raw = normalizeCompareText(entry?.romaneio);
+            return raw || '';
+        }
+
+        function getHarvestDocumentKey(entry) {
+            const dateKey = String(entry?.date || '').trim();
+            const ticketKey = normalizeDigits(entry?.ticket) || '---';
+            const romaneioKey = getPrimaryRomaneioKey(entry) || '---';
+
+            if (!dateKey && ticketKey === '---' && romaneioKey === '---') return '';
+            return `${dateKey}|${ticketKey}|${romaneioKey}`;
+        }
+
+        function hasStrongHarvestDocumentKey(entry) {
+            const dateKey = String(entry?.date || '').trim();
+            const ticketKey = normalizeDigits(entry?.ticket);
+            const romaneioKey = getPrimaryRomaneioKey(entry);
+            let parts = 0;
+
+            if (dateKey) parts++;
+            if (ticketKey) parts++;
+            if (romaneioKey) parts++;
+
+            return parts >= 2;
+        }
+
+        function buildImportDocumentKeyCounts(entries = []) {
+            const counts = new Map();
+
+            entries.forEach(entry => {
+                if (!hasStrongHarvestDocumentKey(entry)) return;
+                const key = getHarvestDocumentKey(entry);
+                if (!key) return;
+                counts.set(key, (counts.get(key) || 0) + 1);
+            });
+
+            return counts;
+        }
+
+        function shouldForceDocumentKeyReplacement(incomingEntry, importDocumentKeyCounts) {
+            if (!hasStrongHarvestDocumentKey(incomingEntry)) return false;
+            const key = getHarvestDocumentKey(incomingEntry);
+            if (!key) return false;
+            return (importDocumentKeyCounts.get(key) || 0) === 1;
         }
 
         function getHarvestMatchContext(existingEntry, incomingEntry) {
@@ -1974,6 +2041,7 @@
             if (context.ticketMatch) score += 120;
             if (context.romaneioMatch) score += 120;
             if (context.dateCompatible) score += 60;
+            if (context.sameDate) score += 25;
             if (context.sameOwner) score += 50;
             if (context.sameWarehouse) score += 35;
             if (context.sameFarm) score += 25;
@@ -1981,6 +2049,8 @@
             else if (context.weightDiff <= 60) score += 28;
             else if (context.weightDiff <= 300) score += 18;
             else if (context.weightDiff <= 1000) score += 8;
+            if (!isPlaceholderHarvestEntry(candidate.existingEntry)) score += 20;
+            else score -= 10;
 
             if (context.comparableOwners && !context.sameOwner) score -= 15;
 
@@ -2008,7 +2078,50 @@
             return -1;
         }
 
-        function findExistingHarvestEntryIndexForImport(incomingEntry, lockedEntryIds = new Set()) {
+        function findMatchingDocumentCandidates(incomingEntry, lockedEntryIds = new Set()) {
+            if (!hasStrongHarvestDocumentKey(incomingEntry)) return [];
+
+            const documentKey = getHarvestDocumentKey(incomingEntry);
+            if (!documentKey) return [];
+
+            return db.entries
+                .map((existingEntry, idx) => ({
+                    existingEntry,
+                    idx,
+                    context: getHarvestMatchContext(existingEntry, incomingEntry)
+                }))
+                .filter(candidate =>
+                    !lockedEntryIds.has(String(candidate.existingEntry.id)) &&
+                    getHarvestDocumentKey(candidate.existingEntry) === documentKey
+                );
+        }
+
+        function pickForcedDocumentReplacementCandidate(candidates, incomingEntry) {
+            if (!candidates || candidates.length === 0) return -1;
+
+            const ranked = candidates
+                .map(candidate => ({
+                    ...candidate,
+                    score: scoreImportReconciliationCandidate(candidate, incomingEntry),
+                    isPlaceholder: isPlaceholderHarvestEntry(candidate.existingEntry)
+                }))
+                .sort((a, b) =>
+                    b.score - a.score ||
+                    Number(a.isPlaceholder) - Number(b.isPlaceholder) ||
+                    a.context.weightDiff - b.context.weightDiff
+                );
+
+            return ranked[0] ? ranked[0].idx : -1;
+        }
+
+        function findExistingHarvestEntryIndexForImport(incomingEntry, lockedEntryIds = new Set(), options = {}) {
+            if (options.forceDocumentKeyMatch) {
+                const documentCandidates = findMatchingDocumentCandidates(incomingEntry, lockedEntryIds);
+                if (documentCandidates.length > 0) {
+                    return pickForcedDocumentReplacementCandidate(documentCandidates, incomingEntry);
+                }
+            }
+
             const strictIdx = db.entries.findIndex(existingEntry =>
                 !lockedEntryIds.has(String(existingEntry.id)) &&
                 !isPlaceholderHarvestEntry(existingEntry) &&
@@ -3263,6 +3376,7 @@
             const tbody = document.getElementById('import-preview-body');
             const summary = document.getElementById('import-preview-summary');
             if (importPreviewData.length > 0) {
+                const importDocumentKeyCounts = buildImportDocumentKeyCounts(importPreviewData);
                 const totalKg = importPreviewData.reduce((acc, curr) => acc + (Number(curr.liquido) || 0), 0);
                 const totalSacks = totalKg / 60;
                 section.classList.remove('hidden');
@@ -3273,7 +3387,8 @@
                     ${removedImportPreviewData.length > 0 ? `<span class="px-3 py-1 rounded-full bg-red-50 border border-red-200 text-[10px] font-black text-red-700 uppercase tracking-widest">${removedImportPreviewData.length} excluidos aguardando baixa</span>` : ''}
                 `;
                 tbody.innerHTML = importPreviewData.map((e, idx) => {
-                    const existingIdx = findExistingHarvestEntryIndexForImport(e);
+                    const forceDocumentKeyMatch = shouldForceDocumentKeyReplacement(e, importDocumentKeyCounts);
+                    const existingIdx = findExistingHarvestEntryIndexForImport(e, new Set(), { forceDocumentKeyMatch });
                     const isDuplicate = existingIdx !== -1;
                     const duplicateLabel = isDuplicate ? (
                         isSameHarvestEntry(db.entries[existingIdx], e) ? 'Ja lancado' : 'Vai atualizar'
@@ -3327,7 +3442,9 @@
             const item = importPreviewData[idx];
             if (!item) return;
 
-            const existingIdx = findExistingHarvestEntryIndexForImport(item);
+            const importDocumentKeyCounts = buildImportDocumentKeyCounts(importPreviewData);
+            const forceDocumentKeyMatch = shouldForceDocumentKeyReplacement(item, importDocumentKeyCounts);
+            const existingIdx = findExistingHarvestEntryIndexForImport(item, new Set(), { forceDocumentKeyMatch });
             const matchedEntry = existingIdx !== -1 ? db.entries[existingIdx] : null;
 
             if (matchedEntry) {
@@ -3363,10 +3480,13 @@
             };
 
             if (confirm(`Deseja salvar os ${importPreviewData.length} registros da pré-visualização?`)) {
+                const importDocumentKeyCounts = buildImportDocumentKeyCounts(importPreviewData);
                 const lockedEntryIds = new Set();
+                const staleDocumentIdsToRemove = new Set();
 
                 for (const e of importPreviewData) {
-                    const existingIdx = findExistingHarvestEntryIndexForImport(e, lockedEntryIds);
+                    const forceDocumentKeyMatch = shouldForceDocumentKeyReplacement(e, importDocumentKeyCounts);
+                    const existingIdx = findExistingHarvestEntryIndexForImport(e, lockedEntryIds, { forceDocumentKeyMatch });
 
                     if (existingIdx !== -1) {
                         // An existing entry was found, so we update it
@@ -3433,6 +3553,14 @@
                             });
                             console.log(`[saveBulkEntries] Skipped identical entry: ID ${currentEntry.id}`);
                         }
+
+                        if (forceDocumentKeyMatch) {
+                            const staleCandidates = findMatchingDocumentCandidates(e, lockedEntryIds);
+                            staleCandidates.forEach(candidate => {
+                                const staleId = String(candidate.existingEntry.id);
+                                if (!lockedEntryIds.has(staleId)) staleDocumentIdsToRemove.add(staleId);
+                            });
+                        }
                     } else {
                         // No existing entry found, add as new
                         // Add creation history
@@ -3475,6 +3603,26 @@
                         liquido: removedEntry.liquido
                     });
                     console.log(`[saveBulkEntries] Removed existing entry from launches: ID ${removedEntry.id}`);
+                }
+
+                for (const staleId of staleDocumentIdsToRemove) {
+                    if (!staleId || lockedEntryIds.has(String(staleId))) continue;
+
+                    const removeIdx = db.entries.findIndex(entry => String(entry.id) === String(staleId));
+                    if (removeIdx === -1) continue;
+
+                    const removedEntry = db.entries[removeIdx];
+                    db.entries.splice(removeIdx, 1);
+                    if (window.deleteEntryFromFirebase) await window.deleteEntryFromFirebase(staleId);
+                    reportData.removed.push({
+                        id: removedEntry.id,
+                        romaneio: removedEntry.romaneio,
+                        ticket: removedEntry.ticket,
+                        farm: removedEntry.farm,
+                        owner: removedEntry.owner,
+                        liquido: removedEntry.liquido
+                    });
+                    console.log(`[saveBulkEntries] Removed stale document entry after replacement: ID ${removedEntry.id}`);
                 }
 
                 saveToDB();
@@ -4633,6 +4781,14 @@
                 const groupDepositedKg = group
                     .filter(entry => !isThirdPartyStorage(entry))
                     .reduce((acc, entry) => acc + getEntryDepositedKg(entry), 0);
+                const ownerTotals = {};
+                const ownerCounts = {};
+
+                group.forEach(entry => {
+                    const ownerKey = normalizeCompareText(entry.owner) || '---';
+                    ownerTotals[ownerKey] = (ownerTotals[ownerKey] || 0) + getEntryDepositedKg(entry);
+                    ownerCounts[ownerKey] = (ownerCounts[ownerKey] || 0) + 1;
+                });
                 
                 // Calculate aggregated status for the group (if all complete, group is complete)
                 const isComplete = group.every(e => getV(e.viaBranca) === 5 && getV(e.viaAzul) === 5);
@@ -4675,6 +4831,10 @@
                     const changeColor = isCreation ? 'text-green-600' : 'text-amber-600';
                     const tooltipColor = isCreation ? 'text-green-400' : 'text-amber-400';
                     const isConferido = matchedEntryIds.has(e.id);
+                    const ownerKey = normalizeCompareText(e.owner) || '---';
+                    const entryDepositedKg = getEntryDepositedKg(e);
+                    const ownerDepositedKg = ownerTotals[ownerKey] || entryDepositedKg;
+                    const ownerEntryCount = ownerCounts[ownerKey] || 1;
 
                     return `
                         <div class="grid grid-cols-12 gap-4 items-center p-4 ${idx > 0 ? 'border-t border-slate-100' : ''} hover:bg-slate-50/50 transition-colors">
@@ -4686,6 +4846,12 @@
                                     ${isConferido ? `<span class="bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-sm animate-pulse"><i data-lucide="check-check" size="8"></i>CONFERIDO</span>` : ''}
                                 </div>
                                 <div class="text-[10px] text-slate-500 font-bold uppercase mt-1 truncate" title="${e.owner}">${e.owner}</div>
+                                <div class="mt-1 flex flex-wrap gap-1">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[8px] font-black uppercase tracking-widest border border-emerald-100">
+                                        Dep.: ${formatKgExact(entryDepositedKg)} kg
+                                    </span>
+                                    ${ownerEntryCount > 1 ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[8px] font-black uppercase tracking-widest border border-blue-100">Total dep.: ${formatKgExact(ownerDepositedKg)} kg</span>` : ''}
+                                </div>
                                 
                                 ${lastChange ? `
                                 <div class="mt-1 flex items-center gap-1 text-[9px] ${changeColor} font-bold cursor-help group/hist relative">
@@ -4899,7 +5065,8 @@
         let charts = {};
 
         function renderDashboard() {
-            const realEntries = db.entries.filter(isRealProductionEntry);
+            const realEntries = db.entries.filter(isCurrentSeasonProductionEntry);
+            const outOfSeasonEntries = db.entries.filter(e => isRealProductionEntry(e) && !isEntryInCurrentHarvestSeason(e));
             const thirdPartyEntries = db.entries.filter(e => hasPositiveHarvestWeight(e) && isThirdPartyStorageEntry(e));
             const mappedEntries = realEntries.filter(e => hasRealText(e.farm));
             const missingFarmEntries = realEntries.filter(e => !hasRealText(e.farm));
@@ -4922,8 +5089,9 @@
                     </button>
                     ` : `<p class="mt-1 text-[9px] text-emerald-600 font-bold">Todas as cargas do total possuem fazenda</p>`}
                     ${thirdPartyEntries.length > 0 ? `<p class="mt-1 text-[9px] text-slate-500 font-bold">${thirdPartyEntries.length} cargas de armazenamento de terceiros ficaram fora da produção</p>` : ''}
+                    ${outOfSeasonEntries.length > 0 ? `<p class="mt-1 text-[9px] text-slate-500 font-bold">${outOfSeasonEntries.length} cargas fora da safra 25/26 ficaram fora do total</p>` : ''}
                     <div class="mt-1 flex items-center gap-1 text-[9px] text-blue-600 font-bold">
-                        <i data-lucide="trending-up" size="10"></i> Safra 25/26
+                        <i data-lucide="trending-up" size="10"></i> Safra ${CURRENT_HARVEST_SEASON.label}
                     </div>
                 </div>
                 <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 group hover:border-indigo-200 transition-colors">
