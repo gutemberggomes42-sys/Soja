@@ -1801,6 +1801,7 @@
         if (!db.reconciliations) db.reconciliations = [];
 
         let importPreviewData = [];
+        let removedImportPreviewData = [];
 
         // Helper global para remover acentos
         window.removeAccents = (str) => {
@@ -3066,7 +3067,9 @@
                 const liquidoTotalPlanilha = cleanNum(findCol(['Peso Liquido Total', 'PESO LIQUIDO TOTAL', 'PESO LIQ TOTAL', 'LIQUIDO TOTAL', 'LIQ TOTAL', 'TOTAL LIQUIDO', 'VALOR LIQUIDO TOTAL']));
                 const depositadoPlanilha = cleanNum(findCol(['Peso Depositado', 'PESO DEPOSITADO', 'DEPOSITADO', 'TOTAL DEPOSITADO', 'PESO LIQUIDO DEPOSITADO', 'PESO LIQ DEPOSITADO', 'LIQUIDO DEPOSITADO', 'VALOR DEPOSITADO']));
                 const liquidoCalculado = (bruto > 0 && tara > 0) ? (bruto - tara - desc) : 0;
-                let liquido = liquidoTotalPlanilha > 0 ? liquidoTotalPlanilha : liquidoPlanilha;
+                let liquido = liquidoTotalPlanilha > 0
+                    ? liquidoTotalPlanilha
+                    : (liquidoPlanilha > 0 ? liquidoPlanilha : depositadoPlanilha);
 
                 // No Excel, priorizamos o liquido vindo da planilha.
                 // So recalculamos quando esse campo nao vier preenchido.
@@ -3098,6 +3101,11 @@
                     viaAzul: false
                 };
             }).filter(e => e.liquido > 0 || e.bruto > 0);
+
+            if (importPreviewData.length === 0) {
+                alert('O sistema leu o arquivo, mas não encontrou linhas válidas para importar. Verifique os nomes das colunas de peso na planilha.');
+            }
+
             renderImportPreview();
         }
 
@@ -3254,6 +3262,7 @@
                     <span class="px-3 py-1 rounded-full bg-white/80 border border-amber-200 text-[10px] font-black text-amber-900 uppercase tracking-widest">${importPreviewData.length} lancamentos</span>
                     <span class="px-3 py-1 rounded-full bg-white/80 border border-amber-200 text-[10px] font-black text-amber-900 uppercase tracking-widest">${formatKgExact(totalKg)} kg</span>
                     <span class="px-3 py-1 rounded-full bg-white/80 border border-amber-200 text-[10px] font-black text-amber-900 uppercase tracking-widest">${totalSacks.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} sc</span>
+                    ${removedImportPreviewData.length > 0 ? `<span class="px-3 py-1 rounded-full bg-red-50 border border-red-200 text-[10px] font-black text-red-700 uppercase tracking-widest">${removedImportPreviewData.length} excluidos aguardando baixa</span>` : ''}
                 `;
                 tbody.innerHTML = importPreviewData.map((e, idx) => {
                     const existingIdx = findExistingHarvestEntryIndexForImport(e);
@@ -3290,22 +3299,47 @@
                             <div class="text-[8px] text-amber-500">B:${e.bruto.toLocaleString('pt-BR')} T:${e.tara.toLocaleString('pt-BR')}</div>
                         </td>
                         <td class="px-2 py-3 text-right">
-                            <button onclick="importPreviewData.splice(${idx},1);renderImportPreview()" class="text-red-400 hover:text-red-600 transition-colors">
+                            <button onclick="removeImportPreviewItem(${idx})" class="text-red-400 hover:text-red-600 transition-colors">
                                 <i data-lucide="trash-2" size="14"></i>
                             </button>
                         </td>
                     </tr>
                 `;
                 }).join('');
-                lucide.createIcons();
+                safeCreateIcons();
             } else {
                 section.classList.add('hidden');
-                summary.innerHTML = '';
+                summary.innerHTML = removedImportPreviewData.length > 0
+                    ? `<span class="px-3 py-1 rounded-full bg-red-50 border border-red-200 text-[10px] font-black text-red-700 uppercase tracking-widest">${removedImportPreviewData.length} excluidos aguardando baixa</span>`
+                    : '';
             }
+        }
+
+        function removeImportPreviewItem(idx) {
+            const item = importPreviewData[idx];
+            if (!item) return;
+
+            const existingIdx = findExistingHarvestEntryIndexForImport(item);
+            const matchedEntry = existingIdx !== -1 ? db.entries[existingIdx] : null;
+
+            if (matchedEntry) {
+                const shouldRemove = confirm(`Este item já existe nos lançamentos.\n\nRomaneio: ${matchedEntry.romaneio || '---'}\nTicket: ${matchedEntry.ticket || '---'}\n\nSe continuar, ele será baixado dos lançamentos ao confirmar a importação. Deseja continuar?`);
+                if (!shouldRemove) return;
+            }
+
+            removedImportPreviewData.push({
+                ...item,
+                matchedExistingId: matchedEntry ? matchedEntry.id : null,
+                matchedExistingRomaneio: matchedEntry ? matchedEntry.romaneio : item.romaneio
+            });
+
+            importPreviewData.splice(idx, 1);
+            renderImportPreview();
         }
 
         function clearImportPreview() {
             importPreviewData = [];
+            removedImportPreviewData = [];
             document.getElementById('import-preview-section').classList.add('hidden');
             document.getElementById('import-preview-summary').innerHTML = '';
         }
@@ -3316,7 +3350,8 @@
             const reportData = {
                 added: [],
                 updated: [],
-                skipped: []
+                skipped: [],
+                removed: []
             };
 
             if (confirm(`Deseja salvar os ${importPreviewData.length} registros da pré-visualização?`)) {
@@ -3413,6 +3448,27 @@
                     if (e.team !== '---' && !db.teams.includes(e.team)) db.teams.push(e.team);
                 }
 
+                for (const removedItem of removedImportPreviewData) {
+                    const matchedExistingId = removedItem.matchedExistingId;
+                    if (!matchedExistingId || lockedEntryIds.has(String(matchedExistingId))) continue;
+
+                    const removeIdx = db.entries.findIndex(entry => String(entry.id) === String(matchedExistingId));
+                    if (removeIdx === -1) continue;
+
+                    const removedEntry = db.entries[removeIdx];
+                    db.entries.splice(removeIdx, 1);
+                    if (window.deleteEntryFromFirebase) await window.deleteEntryFromFirebase(matchedExistingId);
+                    reportData.removed.push({
+                        id: removedEntry.id,
+                        romaneio: removedEntry.romaneio,
+                        ticket: removedEntry.ticket,
+                        farm: removedEntry.farm,
+                        owner: removedEntry.owner,
+                        liquido: removedEntry.liquido
+                    });
+                    console.log(`[saveBulkEntries] Removed existing entry from launches: ID ${removedEntry.id}`);
+                }
+
                 saveToDB();
                 await cleanupDuplicates();
                 clearImportPreview();
@@ -3442,7 +3498,7 @@
                         
                         <div class="flex-1 overflow-auto p-6 space-y-8">
                             <!-- Resumo -->
-                            <div class="grid grid-cols-3 gap-4">
+                            <div class="grid grid-cols-4 gap-4">
                                 <div class="bg-green-50 p-4 rounded-xl border border-green-100">
                                     <div class="text-green-600 text-sm font-semibold uppercase tracking-wider">Novos</div>
                                     <div class="text-3xl font-black text-green-700">${reportData.added.length}</div>
@@ -3450,6 +3506,10 @@
                                 <div class="bg-amber-50 p-4 rounded-xl border border-amber-100">
                                     <div class="text-amber-600 text-sm font-semibold uppercase tracking-wider">Alterados</div>
                                     <div class="text-3xl font-black text-amber-700">${reportData.updated.length}</div>
+                                </div>
+                                <div class="bg-red-50 p-4 rounded-xl border border-red-100">
+                                    <div class="text-red-600 text-sm font-semibold uppercase tracking-wider">Excluídos</div>
+                                    <div class="text-3xl font-black text-red-700">${reportData.removed.length}</div>
                                 </div>
                                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
                                     <div class="text-slate-600 text-sm font-semibold uppercase tracking-wider">Ignorados</div>
@@ -3520,6 +3580,39 @@
                                 </div>
                             </div>
                             ` : ''}
+
+                            ${reportData.removed.length > 0 ? `
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                    <i data-lucide="trash-2" class="w-5 h-5 text-red-500"></i>
+                                    Registros Excluídos dos Lançamentos
+                                </h3>
+                                <div class="bg-red-50/40 rounded-xl border border-red-100 overflow-hidden">
+                                    <table class="w-full text-sm text-left">
+                                        <thead class="bg-red-100/60 text-red-700 font-semibold uppercase text-xs">
+                                            <tr>
+                                                <th class="px-4 py-3">Romaneio</th>
+                                                <th class="px-4 py-3">Ticket</th>
+                                                <th class="px-4 py-3">Fazenda</th>
+                                                <th class="px-4 py-3">Depositário</th>
+                                                <th class="px-4 py-3 text-right">Líquido</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-red-100">
+                                            ${reportData.removed.map(item => `
+                                                <tr class="hover:bg-white/70 transition-colors">
+                                                    <td class="px-4 py-2 font-mono font-medium text-red-900">${item.romaneio || '---'}</td>
+                                                    <td class="px-4 py-2 font-mono text-red-700">${item.ticket || '---'}</td>
+                                                    <td class="px-4 py-2 text-slate-600">${item.farm || '---'}</td>
+                                                    <td class="px-4 py-2 text-slate-600">${item.owner || '---'}</td>
+                                                    <td class="px-4 py-2 text-right font-mono text-red-700">${(Number(item.liquido) || 0).toLocaleString('pt-BR')} kg</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            ` : ''}
                         </div>
                         
                         <div class="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
@@ -3532,7 +3625,7 @@
             `;
             
             document.body.insertAdjacentHTML('beforeend', modalHtml);
-            lucide.createIcons();
+            safeCreateIcons();
         }
 
         function translateField(field) {
